@@ -1,4 +1,4 @@
-//nolint:revive // api is appropriate for API error handling
+//nolint:revive // "api" names the API error envelope, which is what this is
 package api
 
 import (

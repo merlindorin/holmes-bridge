@@ -25,6 +25,10 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/metrics"
 )
 
+// statusKey is the field every acknowledgement carries, naming what the bridge
+// decided to do with the delivery.
+const statusKey = "status"
+
 // maxBodyBytes bounds the webhook body. An Alertmanager group is a few KB even
 // with a hundred alerts in it.
 const maxBodyBytes = 4 << 20
@@ -97,7 +101,8 @@ func (s *Server) receive(c *gin.Context) {
 		// A payload with no alerts is not an error on Alertmanager's side, and
 		// answering 4xx would make it retry something that will never differ.
 		if errors.Is(validateErr, alertmanager.ErrNoAlerts) {
-			c.JSON(http.StatusOK, gin.H{"status": "ignored", "reason": "no alerts in payload"})
+			c.JSON(http.StatusOK, gin.H{
+				statusKey: "ignored", "reason": "no alerts in payload"})
 			return
 		}
 
@@ -119,7 +124,7 @@ func (s *Server) receive(c *gin.Context) {
 	go s.investigate(context.WithoutCancel(c.Request.Context()), log, &payload)
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"status":    "investigating",
+		statusKey:   "investigating",
 		"group_key": payload.Key(),
 		"alerts":    len(payload.Alerts),
 	})

@@ -22,6 +22,10 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/metrics"
 )
 
+// statusKey is the field every acknowledgement carries, naming what the bridge
+// decided to do with the delivery.
+const statusKey = "status"
+
 // maxBodyBytes bounds the webhook body read. incident.io payloads are a few KB;
 // anything far larger is not a genuine delivery.
 const maxBodyBytes = 1 << 20
@@ -116,7 +120,7 @@ func (s *Server) receive(c *gin.Context) {
 
 	if !s.triggers[envelope.EventType] {
 		log.Debug("event is not a configured trigger, ignoring")
-		c.JSON(http.StatusOK, gin.H{"status": "ignored", "reason": "event type is not a trigger"})
+		c.JSON(http.StatusOK, gin.H{statusKey: "ignored", "reason": "event type is not a trigger"})
 
 		return
 	}
@@ -124,7 +128,7 @@ func (s *Server) receive(c *gin.Context) {
 	incidentID, ok := incidentIDOf(envelope)
 	if !ok {
 		log.Warn("trigger event carried no incident id, ignoring")
-		c.JSON(http.StatusOK, gin.H{"status": "ignored", "reason": "no incident id in payload"})
+		c.JSON(http.StatusOK, gin.H{statusKey: "ignored", "reason": "no incident id in payload"})
 
 		return
 	}
@@ -133,7 +137,7 @@ func (s *Server) receive(c *gin.Context) {
 	// written, which would cancel it.
 	go s.investigate(context.WithoutCancel(c.Request.Context()), log, incidentID)
 
-	c.JSON(http.StatusAccepted, gin.H{"status": "investigating", "incident_id": incidentID})
+	c.JSON(http.StatusAccepted, gin.H{statusKey: "investigating", "incident_id": incidentID})
 }
 
 // trigger starts an investigation by hand, which is how you exercise the bridge
