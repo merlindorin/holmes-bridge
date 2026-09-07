@@ -1,5 +1,12 @@
-# Adapted from the `goreleaser:boilerplate` output; this repo ships two binaries
-# rather than one, so builds and dockers are duplicated per command.
+# Adapted from the `goreleaser:boilerplate` output.
+#
+# This repo ships two binaries, and container images are built by
+# .github/workflows/image.yml rather than here. That split is deliberate:
+# goreleaser's `dockers` is deprecated, and it builds one image per
+# architecture, whereas a mixed-architecture cluster needs a single multi-arch
+# manifest. Buildx does that in one step; goreleaser owns binaries, archives,
+# checksums, SBOMs and signing.
+version: 2
 
 project_name: holmes-bridge
 
@@ -7,6 +14,15 @@ release:
   github:
     owner: merlindorin
     name: holmes-bridge
+  footer: |
+    ## Container images
+
+    Built by the `image` workflow as a single multi-arch manifest, so one tag
+    serves both amd64 and arm64 nodes:
+
+    ```
+    ghcr.io/merlindorin/holmes-bridge:{{ .Tag }}
+    ```
 
 builds:
   - id: holmes-bridge
@@ -15,6 +31,7 @@ builds:
     goarch: [amd64, arm64]
     main: ./cmd/holmes-bridge
     binary: holmes-bridge
+    # Use the commit timestamp so a rebuild of the same commit is identical.
     mod_timestamp: '{{ .CommitTimestamp }}'
     flags: [-trimpath]
     ldflags:
@@ -30,6 +47,18 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{ .CommitDate }} -X main.buildSource={{ .GitURL }}
+
+archives:
+  - id: default
+    ids: [holmes-bridge, incidentio-mock]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE.md
+      # The scenarios the mock serves are useless without its fixtures.
+      - fixtures/**/*
 
 gomod:
   proxy: false
@@ -58,40 +87,20 @@ signs:
     artifacts: checksum
     output: true
 
-dockers:
-  - id: holmes-bridge
-    ids: [holmes-bridge, incidentio-mock]
-    image_templates:
-      - 'ghcr.io/merlindorin/holmes-bridge:{{ .Tag }}'
-    dockerfile: Dockerfile
-    extra_files: [fixtures]
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name=holmes-bridge"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.description=Investigate incident.io incidents with HolmesGPT"
-      - "--label=org.opencontainers.image.source=https://github.com/merlindorin/holmes-bridge"
-
-  - id: incidentio-mock
-    ids: [incidentio-mock]
-    image_templates:
-      - 'ghcr.io/merlindorin/incidentio-mock:{{ .Tag }}'
-    dockerfile: Dockerfile.mock
-    extra_files: [fixtures]
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name=incidentio-mock"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.description=A fake incident.io for development and testing"
-      - "--label=org.opencontainers.image.source=https://github.com/merlindorin/holmes-bridge"
-
-docker_signs:
-  - cmd: cosign
-    env: [COSIGN_EXPERIMENTAL=1]
-    artifacts: images
-    output: true
-    args: ['sign', '${artifact}', "--yes"]
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Other
+      order: 99
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
