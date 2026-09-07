@@ -134,7 +134,7 @@ func (s *Serve) Run(
 	// "Post https://hub/api/enroll: cannot listen on 0.0.0.0:18081" — a local
 	// error wearing a remote error's clothing. Keeping the two apart means each
 	// failure is reported as itself.
-	peer, err := s.Expose.EnrollFor(ctx, logger, s.exposedRoutes(logger, m, bridge, router), exposecmd.WebhookPath)
+	peer, err := s.Expose.Enroll(ctx, logger, s.exposedRoutes(logger, m, bridge, router))
 	if err != nil {
 		return err
 	}

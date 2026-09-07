@@ -73,21 +73,13 @@ reach for and which silently never connects.
 {{- end }}
 
 {{/*
-The subcommand for the selected pipeline. They are different flows, so this is
-a choice rather than a toggle.
+The command the container runs.
 */}}
 {{- define "holmes-bridge.args" -}}
-{{- if eq .Values.pipeline "incidentio" }}
 - incidentio
 - serve
 {{- range .Values.incidentio.triggers }}
 - --trigger={{ . }}
-{{- end }}
-{{- else if eq .Values.pipeline "alertmanager" }}
-- ntfy
-- serve
-{{- else }}
-{{- fail (printf "pipeline must be \"incidentio\" or \"alertmanager\", got %q" .Values.pipeline) }}
 {{- end }}
 {{- if .Values.expose.enabled }}
 - --expose

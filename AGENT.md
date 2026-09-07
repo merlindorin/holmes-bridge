@@ -140,43 +140,29 @@ tests exist because mock records reach Slack channel names, log lines and LLM
 prompts, where a realistic-looking incident is something a person acts on by
 mistake. Do not relax them to make a fixture read better.
 
-**Notifications are fire-and-forget.** `investigate.Notifier` is an optional
-port; `internal/infra/ntfy` implements it. A push must never change an
-investigation's outcome — the analysis is on the incident either way — so
-publish errors are logged and dropped. Only the analysis's Summary section is
-pushed (`headline()`), and skips are silent.
-
 **Concurrency is per incident.** `inflight` collapses duplicate triggers for one
 incident, `lastRun` gives each its own cooldown, and `slots` bounds how many run
 at once. The slot wait is bounded by `QueueTimeout` — without it, webhook-driven
 investigations (whose context is never cancelled) queue indefinitely and a storm
 becomes a backlog of stale analyses.
 
-**There are two pipelines, sharing one engine.** `incidentio serve` is incident.io
-in and incident.io out; `ntfy serve` is Alertmanager in and a notification out, with no
-incident.io client at all (the service tolerates a nil one because only the
-incident path uses it). Both go through `Service.guarded`, which owns the
-per-subject claim, the cooldown, the slot budget, metrics and the notification —
-they differ only in what they read and where the answer goes. Add a third
-pipeline by writing a prompt builder and calling `guarded`, not by duplicating
-that machinery.
+**Pacing lives in one place.** Every investigation goes through
+`Service.guarded`, which owns the per-subject claim, the cooldown, the slot
+budget and the metrics. A second trigger — a different source, a different
+prompt — should be a prompt builder plus a call to `guarded`, not a second copy
+of that machinery. There was an Alertmanager pipeline built exactly that way;
+it was removed because the bridge is an incident.io integration.
 
-**Alertmanager webhooks cannot be signed.** incident.io signs; Alertmanager
-offers only `http_config.authorization`. So `--alertmanager-token` is the whole
-of the authentication, and a reachable endpoint without one is open. Dedup keys
-off Alertmanager's `groupKey`, which is stable across re-notifications.
+**The integration has its own subcommands.** `incidentio identity|incidents|show`
+exist so incident.io can be checked without running an investigation. They embed
+the same option groups the daemon uses, so what they exercise is the same code
+path.
 
-**Each pipeline owns its subcommands.** `incidentio identity|incidents|show` and
-`ntfy config|test` exist so a single integration can be checked without running
-an investigation. They embed the same option groups the daemon uses, so what
-they exercise is the same code path — `ntfy test` uses `Ntfy.Client()` rather
-than the notifier, because the notifier swallows publish errors by design.
-
-**Only the webhook is inbound.** The bridge calls the incident.io API,
-HolmesGPT and ntfy outward; nothing about those needs exposing. `--expose`
-exists solely so incident.io's webhooks can reach the bridge, which is why the
-tunnel publishes only `/webhooks/incidentio` by default. `.env` and `--help` are
-both grouped by direction to keep that clear.
+**Only the webhook is inbound.** The bridge calls the incident.io API and
+HolmesGPT outward; nothing about those needs exposing. `--expose` exists solely
+so incident.io's webhooks can reach the bridge, which is why the tunnel
+publishes only `/webhooks/incidentio` by default. `.env` and `--help` are both
+grouped by direction to keep that clear.
 
 **`--expose` needs subdomain routing.** The bridge can publish its webhook
 endpoint through a holt reverse tunnel (`cmd/holmes-bridge/commands/expose/expose.go`,

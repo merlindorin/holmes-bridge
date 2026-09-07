@@ -21,7 +21,6 @@ spec:
         {{- end }}
       labels:
         {{- include "holmes-bridge.selectorLabels" . | nindent 8 }}
-        holmes-bridge/pipeline: {{ .Values.pipeline }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -72,22 +71,11 @@ spec:
             - name: INVESTIGATION_TIMEOUT
               value: {{ .Values.investigation.timeout | quote }}
 
-            {{- if eq .Values.pipeline "incidentio" }}
             - name: INCIDENTIO_URL
               value: {{ .Values.incidentio.url | quote }}
-            {{- end }}
-
-            {{- with .Values.ntfy.topic }}
-            - name: NTFY_TOPIC
-              value: {{ . | quote }}
-            {{- end }}
-            - name: NTFY_SERVER
-              value: {{ .Values.ntfy.server | quote }}
-            - name: NTFY_ON_FAILURE
-              value: {{ .Values.ntfy.onFailure | quote }}
           envFrom:
-            # Carries INCIDENTIO_API_KEY, WEBHOOK_SECRET, ALERTMANAGER_TOKENS,
-            # NTFY_TOKEN and HOLT_TOKEN — whichever are set.
+            # Carries INCIDENTIO_API_KEY, WEBHOOK_SECRET and HOLT_TOKEN —
+            # whichever are set.
             - secretRef:
                 name: {{ include "holmes-bridge.secretName" . }}
           livenessProbe:

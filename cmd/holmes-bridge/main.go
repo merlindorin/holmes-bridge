@@ -14,7 +14,6 @@ import (
 
 	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands"
 	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/incidentio"
-	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/ntfy"
 	"github.com/merlindorin/holmes-bridge/internal/globals"
 )
 
@@ -43,7 +42,6 @@ func main() {
 		MetricServer: &globals.MetricServer{},
 
 		IncidentIO: &incidentio.Cmd{},
-		Ntfy:       &ntfy.Cmd{},
 	}
 
 	ctx := kong.Parse(
@@ -56,7 +54,7 @@ func main() {
 		// most contested ports on a development machine. Containers are
 		// unaffected: the Helm charts set HTTP_PORT explicitly.
 		kong.Vars{"default_http_port": "18081"},
-		// Titles the sections of --help, so the ntfy settings can be found
+		// Titles the sections of --help, so a group of settings can be found
 		// without scanning thirty unrelated flags.
 		commands.HelpGroups(),
 		kong.Configuration(
@@ -76,10 +74,7 @@ type CMD struct {
 	*globals.HTTPServer   `embed:"" prefix:"http-"`
 	*globals.MetricServer `embed:"" prefix:"otel-"`
 
-	// One group per pipeline. Each owns its own flow — incident.io in, analysis
-	// written back; or Alertmanager in, notification out — and carries the
-	// commands for checking that integration on its own, rather than inferring
-	// its health from a failed investigation.
+	// The pipeline, plus the commands for checking incident.io on its own
+	// rather than inferring its health from a failed investigation.
 	IncidentIO *incidentio.Cmd `cmd:"" name:"incidentio" help:"Investigate incident.io incidents, and inspect the org they come from"`
-	Ntfy       *ntfy.Cmd       `cmd:"" name:"ntfy" help:"Investigate Alertmanager alerts, and check notifications"`
 }

@@ -1,14 +1,12 @@
 package investigate_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/merlindorin/holmes-bridge/api/incidentio"
 	"github.com/merlindorin/holmes-bridge/internal/app/investigate"
-	"github.com/merlindorin/holmes-bridge/internal/domain/alertmanager"
 )
 
 func TestBuildPromptCarriesTheIncidentContext(t *testing.T) {
@@ -107,72 +105,5 @@ func TestBuildPromptCollapsesMultilineText(t *testing.T) {
 
 	if !strings.Contains(prompt.Ask, "line one line two line three") {
 		t.Errorf("multi-line summaries should collapse onto one bullet:\n%s", prompt.Ask)
-	}
-}
-
-func TestBuildAlertPromptCarriesTheLabels(t *testing.T) {
-	t.Parallel()
-
-	p := &alertmanager.Payload{
-		Version: "4", Status: alertmanager.StatusFiring,
-		GroupKey:          `{}:{alertname="KubePodCrashLooping"}`,
-		CommonLabels:      map[string]string{"alertname": "KubePodCrashLooping", "service": "checkout-api"},
-		CommonAnnotations: map[string]string{"summary": "checkout-api is crash looping", "runbook_url": "https://runbook"},
-		Alerts: []alertmanager.Alert{{
-			Status:       alertmanager.StatusFiring,
-			Labels:       map[string]string{"alertname": "KubePodCrashLooping", "pod": "checkout-api-1"},
-			Annotations:  map[string]string{"summary": "pod 1 is looping"},
-			StartsAt:     time.Now().Add(-20 * time.Minute),
-			GeneratorURL: "http://prometheus/graph",
-		}},
-	}
-
-	prompt := investigate.BuildAlertPrompt(p)
-
-	// Everything the model can know comes from labels and annotations here —
-	// there is no incident, no summary somebody wrote, no update feed.
-	for _, want := range []string{
-		"KubePodCrashLooping", "checkout-api", "checkout-api-1",
-		"pod 1 is looping", "https://runbook", "http://prometheus/graph",
-	} {
-		if !strings.Contains(prompt.Ask, want) {
-			t.Errorf("prompt is missing %q\n---\n%s", want, prompt.Ask)
-		}
-	}
-
-	// It must say plainly that nothing has been triaged, or the model assumes
-	// context it does not have.
-	if !strings.Contains(prompt.Ask, "no incident") {
-		t.Error("the prompt should say there is no incident behind this")
-	}
-
-	if prompt.System != investigate.BuildPrompt(liveIncident(), nil, nil).System {
-		t.Error("both pipelines should demand the same answer structure")
-	}
-}
-
-func TestBuildAlertPromptBoundsALargeGroup(t *testing.T) {
-	t.Parallel()
-
-	// A group can carry hundreds of near-identical alerts; a prompt made mostly
-	// of repeated label sets crowds out the reasoning.
-	alerts := make([]alertmanager.Alert, 50)
-	for i := range alerts {
-		alerts[i] = alertmanager.Alert{
-			Status: alertmanager.StatusFiring,
-			Labels: map[string]string{"alertname": "Noisy", "pod": fmt.Sprintf("pod-%d", i)},
-		}
-	}
-
-	prompt := investigate.BuildAlertPrompt(&alertmanager.Payload{
-		Version: "4", Status: alertmanager.StatusFiring, Alerts: alerts,
-	})
-
-	if strings.Contains(prompt.Ask, "pod-40") {
-		t.Error("a large group should be truncated rather than listed in full")
-	}
-
-	if !strings.Contains(prompt.Ask, "further alerts in this group are not listed") {
-		t.Error("the prompt should say how many were left out")
 	}
 }

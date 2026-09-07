@@ -99,7 +99,6 @@ type Service struct {
 	logger    *zap.Logger
 	incidents IncidentIO
 	holmes    Holmes
-	notifier  Notifier
 	metrics   *metrics.Metrics
 	cfg       Config
 
@@ -132,7 +131,6 @@ const DefaultQueueTimeout = 5 * time.Minute
 // New builds the service, filling in sensible defaults for a zero Config.
 func New(
 	logger *zap.Logger, client IncidentIO, holmesClient Holmes, m *metrics.Metrics, cfg Config,
-	notifiers ...Notifier,
 ) *Service {
 	if cfg.MaxConcurrent <= 0 {
 		cfg.MaxConcurrent = 2
@@ -162,7 +160,6 @@ func New(
 		logger:    logger.Named("investigate"),
 		incidents: client,
 		holmes:    holmesClient,
-		notifier:  firstNotifier(notifiers),
 		metrics:   m,
 		cfg:       cfg,
 		slots:     make(chan struct{}, cfg.MaxConcurrent),
@@ -170,18 +167,6 @@ func New(
 		lastRun:   map[string]time.Time{},
 		now:       time.Now,
 	}
-}
-
-// firstNotifier keeps New's signature variadic — so every existing caller keeps
-// working — while the service holds at most one.
-func firstNotifier(notifiers []Notifier) Notifier {
-	for _, n := range notifiers {
-		if n != nil {
-			return n
-		}
-	}
-
-	return nil
 }
 
 // Result reports what an investigation did.
@@ -223,11 +208,7 @@ func (s *Service) Investigate(ctx context.Context, incidentID string) (*Result, 
 
 // guarded wraps one investigation with everything that is true of all of them,
 // whatever they are about: one at a time per subject, a bounded number at once,
-// a cooldown afterwards, metrics, and a notification.
-//
-// Both pipelines go through here — an incident.io incident and an Alertmanager
-// group differ in what they read and where the answer goes, not in how they
-// should be paced.
+// a cooldown afterwards, and metrics.
 func (s *Service) guarded(
 	ctx context.Context, key string, run func(context.Context, time.Time) (*Result, error),
 ) (*Result, error) {
@@ -244,8 +225,8 @@ func (s *Service) guarded(
 	completed := false
 	defer func() { s.release(key, completed) }()
 
-	// Acquire a slot before doing any work, so an alert storm queues rather
-	// than stampeding HolmesGPT — but bounded, so the queue cannot grow into a
+	// Acquire a slot before doing any work, so a burst of incidents queues
+	// rather than stampeding HolmesGPT — but bounded, so the queue cannot grow into a
 	// backlog of analyses nobody will read.
 	waitCtx := ctx
 
@@ -291,30 +272,10 @@ func (s *Service) guarded(
 
 	if err != nil {
 		s.metrics.InvestigationsFailed.Add(ctx, 1)
-		s.notify(ctx, Notification{
-			IncidentID: key,
-			Headline:   err.Error(),
-			Err:        err,
-		})
-
 		return nil, err
 	}
 
 	s.metrics.InvestigationsSucceeded.Add(ctx, 1)
-
-	// A skipped investigation is a deliberate non-event: nothing was spent and
-	// nothing was learned, so pushing it to a phone would be pure noise.
-	if result.Skipped == "" {
-		s.notify(ctx, Notification{
-			IncidentID: result.IncidentID,
-			Reference:  result.Reference,
-			Name:       result.Name,
-			Permalink:  result.Permalink,
-			Headline:   headline(result.Analysis),
-			Analysis:   result.Analysis,
-			ToolCalls:  result.ToolCalls,
-		})
-	}
 
 	return result, nil
 }

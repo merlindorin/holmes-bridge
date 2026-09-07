@@ -11,8 +11,6 @@ incidents.
 
 ## How it works
 
-One engine, two ways in and two ways out. You pick a **connector**.
-
 ```
                     ┌──────────────────────────────┐
                     │          HolmesGPT           │
@@ -22,48 +20,20 @@ One engine, two ways in and two ways out. You pick a **connector**.
                                 │    │
                   "what broke?" ▲    ▼ analysis
                                 │    │
-                    ┌───────────┴────┴─────────────┐
-                    │        holmes-bridge         │
-                    └────▲────────────────────▲────┘
-                         │                    │
-               incident.io connector   ntfy connector
+   incident         ┌───────────┴────┴─────────────┐        analysis posted
+   declared   ─────▶│        holmes-bridge         │─────▶  on the incident
+                    └──────────────────────────────┘
+  signed webhook                                          where everyone is
+                                                          already looking
 ```
 
-### incident.io connector
+An incident is declared. The bridge reads it — the incident, its alerts, its
+update feed — asks HolmesGPT what broke, and writes the answer back onto the
+incident. Nobody has to go looking anywhere else.
 
-An incident is declared. The bridge reads it, investigates, and writes the
-analysis back onto the incident — so the answer is waiting in the channel where
-everyone is already looking.
-
-```
-  incident declared   ──▶  bridge  ──▶  HolmesGPT  ──▶  update on the incident
-  signed webhook
-```
-
-### ntfy connector
-
-Alertmanager fires. The bridge investigates and pushes the conclusion to your
-phone. No incident.io account, no incident declared, nothing written back.
-
-```
-  Alertmanager alert  ──▶  bridge  ──▶  HolmesGPT  ──▶  push to your phone
-  bearer token
-```
-
-### Side by side
-
-|                               | incident.io connector                     | ntfy connector                     |
-|-------------------------------|-------------------------------------------|------------------------------------|
-| **Triggered by**              | an incident opening or changing status    | an Alertmanager alert              |
-| **Holmes reads**              | the incident, its alerts, its update feed | the alert's labels and annotations |
-| **Answer lands on**           | the incident itself                       | your phone                         |
-| **Caller proves itself with** | a signed webhook                          | a bearer token                     |
-| **Deduplicates on**           | the incident                              | Alertmanager's alert group         |
-| **Needs incident.io**         | yes                                       | no                                 |
-
-Both share the same engine underneath: the same concurrency budget, the same
-cooldown so an investigation cannot retrigger itself, the same prompt structure.
-They differ only in what they read and where the answer goes.
+It paces itself, because an incident fires events constantly: one investigation
+at a time per incident, a bounded number at once, and a cooldown afterwards so
+the bridge cannot react to its own write-back.
 
 ## Try it
 
@@ -86,8 +56,9 @@ minute or two per investigation and calls a paid model.
 
 ## Running it for real
 
-There's a Helm chart in `helm/holmes-bridge`. Choose the connector, point it at
-your Holmes, give it credentials, and it deploys the matching pipeline.
+There's a Helm chart in `helm/holmes-bridge`. Point it at your Holmes, give it
+your incident.io credentials, and it deploys the bridge — with HolmesGPT
+alongside as a subchart, unless you already run one.
 
 Two things worth knowing before you point it at a real org:
 

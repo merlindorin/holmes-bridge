@@ -7,7 +7,6 @@ import (
 
 	holmescmd "github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/holmes"
 	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/investigation"
-	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/ntfy"
 	"github.com/merlindorin/holmes-bridge/internal/app/investigate"
 	"github.com/merlindorin/holmes-bridge/internal/infra/holmes"
 	"github.com/merlindorin/holmes-bridge/internal/infra/incidentio"
@@ -22,7 +21,6 @@ import (
 type Connections struct {
 	IncidentIO                  `embed:""`
 	holmescmd.Holmes            `embed:""`
-	ntfy.Ntfy                   `embed:""`
 	investigation.Investigation `embed:""`
 }
 
@@ -45,15 +43,10 @@ func (o *Connections) build(logger *zap.Logger, m *metrics.Metrics) (dependencie
 		return dependencies{}, err
 	}
 
-	notifier, err := o.Ntfy.Notifier(logger)
-	if err != nil {
-		return dependencies{}, err
-	}
-
 	holmesClient := o.Holmes.Client()
 
 	return dependencies{
-		service: investigate.New(logger, client, holmesClient, m, cfg, notifier),
+		service: investigate.New(logger, client, holmesClient, m, cfg),
 		client:  client,
 		holmes:  holmesClient,
 	}, nil

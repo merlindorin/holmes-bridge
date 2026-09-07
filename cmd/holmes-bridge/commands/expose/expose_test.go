@@ -15,7 +15,7 @@ func TestWebhookURLUnderSubdomainRouting(t *testing.T) {
 	got, err := webhookURL(&holt.Peer{
 		Name: "holmes-bridge",
 		URL:  "https://holmes-bridge.example.com/",
-	}, WebhookPath)
+	})
 	if err != nil {
 		t.Fatalf("webhookURL: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestWebhookURLJoinsWithoutDoubleSlash(t *testing.T) {
 		"https://holmes-bridge.example.com/",
 		"https://holmes-bridge.example.com",
 	} {
-		got, err := webhookURL(&holt.Peer{Name: "holmes-bridge", URL: base}, WebhookPath)
+		got, err := webhookURL(&holt.Peer{Name: "holmes-bridge", URL: base})
 		if err != nil {
 			t.Fatalf("%s: %v", base, err)
 		}
@@ -55,7 +55,7 @@ func TestWebhookURLRejectsHeaderRouting(t *testing.T) {
 		Name:        "holmes-bridge",
 		URL:         "https://holt.example.com",
 		RouteHeader: "x-tunnel-peer",
-	}, WebhookPath)
+	})
 	if err == nil {
 		t.Fatal("header routing should be rejected")
 	}
@@ -72,7 +72,7 @@ func TestWebhookURLRejectsUnknownAddress(t *testing.T) {
 
 	// A hub that could not be asked leaves the URL empty. Reporting that is
 	// more useful than publishing a tunnel nobody can address.
-	_, err := webhookURL(&holt.Peer{Name: "holmes-bridge"}, WebhookPath)
+	_, err := webhookURL(&holt.Peer{Name: "holmes-bridge"})
 	if err == nil {
 		t.Fatal("an empty URL should be rejected")
 	}

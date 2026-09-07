@@ -1,9 +1,9 @@
 apiVersion: v2
 name: holmes-bridge
-description: Investigate incidents with HolmesGPT — from incident.io, or straight from Alertmanager
+description: Investigate incident.io incidents with HolmesGPT and write the analysis back
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"
 home: https://github.com/merlindorin/holmes-bridge
 sources:
   - https://github.com/merlindorin/holmes-bridge
@@ -12,7 +12,6 @@ maintainers:
 keywords:
   - incident.io
   - holmesgpt
-  - alertmanager
   - sre
 
 # HolmesGPT ships as a subchart so one `helm install` brings up the whole stack.
