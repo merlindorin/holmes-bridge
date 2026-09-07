@@ -26,9 +26,9 @@ source hack/lib.sh
 load_dotenv .env
 load_dotenv .env.default
 
-MOCK_PORT="${MOCK_PORT:-18080}"
-BRIDGE_PORT="${BRIDGE_PORT:-18081}"
-HOLMES_PORT="${HOLMES_PORT:-15050}"
+TEST_MOCK_PORT="${TEST_MOCK_PORT:-18080}"
+TEST_BRIDGE_PORT="${TEST_BRIDGE_PORT:-18081}"
+TEST_HOLMES_PORT="${TEST_HOLMES_PORT:-15050}"
 
 HOLMES_NAMESPACE="${HOLMES_NAMESPACE:-holmes}"
 HOLMES_RELEASE="${HOLMES_RELEASE:-holmes}"
@@ -37,8 +37,8 @@ HOLMES_RELEASE="${HOLMES_RELEASE:-holmes}"
 # for its own default.
 HOLMES_MODEL="${HOLMES_MODEL:-claude-sonnet}"
 
-SCENARIO="${SCENARIO:-checkout-crashloop}"
-APPLY_WORKLOAD="${APPLY_WORKLOAD:-1}"
+TEST_SCENARIO="${TEST_SCENARIO:-checkout-crashloop}"
+TEST_APPLY_WORKLOAD="${TEST_APPLY_WORKLOAD:-1}"
 
 # A fixed development secret. Everything here is on loopback; a real deployment
 # takes its secret from incident.io's webhook settings.
@@ -68,7 +68,7 @@ trap cleanup EXIT INT TERM
 # Either use a Holmes that is already reachable (someone else's port-forward, or
 # a HOLMES_URL pointing elsewhere), or forward to the one in the cluster.
 
-HOLMES_URL="${HOLMES_URL:-http://127.0.0.1:${HOLMES_PORT}}"
+HOLMES_URL="${HOLMES_URL:-http://127.0.0.1:${TEST_HOLMES_PORT}}"
 
 if curl -sf --max-time 3 "${HOLMES_URL}/healthz" >/dev/null 2>&1; then
   echo "using the HolmesGPT already reachable at ${HOLMES_URL}"
@@ -135,7 +135,7 @@ Check that your kubectl context ($(kubectl config current-context 2>/dev/null ||
 
     while true; do
       kubectl port-forward -n "$HOLMES_NAMESPACE" \
-        "svc/${HOLMES_RELEASE}-holmes" "${HOLMES_PORT}:80" >/dev/null 2>&1
+        "svc/${HOLMES_RELEASE}-holmes" "${TEST_HOLMES_PORT}:80" >/dev/null 2>&1
 
       # Any exit means the tunnel is gone, clean or not. Only the trap stops us.
       echo "port-forward to Holmes dropped, reconnecting..." >&2
@@ -178,7 +178,7 @@ fi
 
 # --- the workload Holmes will investigate ------------------------------------
 
-if [[ "$APPLY_WORKLOAD" == "1" ]] && command -v kubectl >/dev/null 2>&1; then
+if [[ "$TEST_APPLY_WORKLOAD" == "1" ]] && command -v kubectl >/dev/null 2>&1; then
   echo "applying the broken demo workload (namespace checkout-demo)"
   kubectl apply -f hack/demo-workload.yaml >/dev/null
   # No wait: the whole point is that it never becomes ready. Give it long enough
@@ -192,18 +192,18 @@ echo "building..."
 go build -o bin/incidentio-mock ./cmd/incidentio-mock
 go build -o bin/holmes-bridge ./cmd/holmes-bridge
 
-echo "starting incident.io mock on :${MOCK_PORT} (scenario: ${SCENARIO})"
+echo "starting incident.io mock on :${TEST_MOCK_PORT} (scenario: ${TEST_SCENARIO})"
 ./bin/incidentio-mock serve \
-  --http-port "${MOCK_PORT}" \
-  --scenario "${SCENARIO}" \
+  --http-port "${TEST_MOCK_PORT}" \
+  --scenario "${TEST_SCENARIO}" \
   --webhook-secret "${SECRET}" \
-  --webhook "name=bridge,url=http://127.0.0.1:${BRIDGE_PORT}/webhooks/incidentio" &
+  --webhook "name=bridge,url=http://127.0.0.1:${TEST_BRIDGE_PORT}/webhooks/incidentio" &
 pids+=($!)
 
-echo "starting holmes-bridge on :${BRIDGE_PORT}"
+echo "starting holmes-bridge on :${TEST_BRIDGE_PORT}"
 ./bin/holmes-bridge serve \
-  --http-port "${BRIDGE_PORT}" \
-  --incidentio-url "http://127.0.0.1:${MOCK_PORT}" \
+  --http-port "${TEST_BRIDGE_PORT}" \
+  --incidentio-url "http://127.0.0.1:${TEST_MOCK_PORT}" \
   --holmes-url "${HOLMES_URL}" \
   ${HOLMES_MODEL:+--holmes-model "${HOLMES_MODEL}"} \
   --webhook-secret "${SECRET}" \
@@ -213,8 +213,8 @@ pids+=($!)
 
 echo -n "waiting for the bridge and the mock"
 for _ in $(seq 1 60); do
-  if curl -sf "http://127.0.0.1:${MOCK_PORT}/liveness" >/dev/null 2>&1 &&
-     curl -sf "http://127.0.0.1:${BRIDGE_PORT}/readiness" >/dev/null 2>&1; then
+  if curl -sf "http://127.0.0.1:${TEST_MOCK_PORT}/liveness" >/dev/null 2>&1 &&
+     curl -sf "http://127.0.0.1:${TEST_BRIDGE_PORT}/readiness" >/dev/null 2>&1; then
     break
   fi
   echo -n "."
@@ -224,23 +224,23 @@ echo " ready"
 
 cat <<EOF
 
-  incident.io mock   http://127.0.0.1:${MOCK_PORT}
-  holmes-bridge      http://127.0.0.1:${BRIDGE_PORT}
+  incident.io mock   http://127.0.0.1:${TEST_MOCK_PORT}
+  holmes-bridge      http://127.0.0.1:${TEST_BRIDGE_PORT}
   HolmesGPT          ${HOLMES_URL}  (model: ${HOLMES_MODEL:-server default})
 
-The mock is serving '${SCENARIO}', which describes the broken workload now
+The mock is serving '${TEST_SCENARIO}', which describes the broken workload now
 running in the checkout-demo namespace. TEST-201 is the live SEV1.
 
 Try:
 
   # Investigate the incident that is already open. This calls a real model, so
   # it takes a minute or two and costs a few cents.
-  INC=\$(curl -s http://127.0.0.1:${MOCK_PORT}/v2/incidents \\
+  INC=\$(curl -s http://127.0.0.1:${TEST_MOCK_PORT}/v2/incidents \\
     | jq -r '.incidents[] | select(.reference=="TEST-201") | .id')
-  curl -s -X POST http://127.0.0.1:${BRIDGE_PORT}/investigations/\$INC | jq -r '.analysis'
+  curl -s -X POST http://127.0.0.1:${TEST_BRIDGE_PORT}/investigations/\$INC | jq -r '.analysis'
 
   # Or declare a new incident and let the webhook drive it
-  curl -s -X POST http://127.0.0.1:${MOCK_PORT}/v2/incidents \\
+  curl -s -X POST http://127.0.0.1:${TEST_MOCK_PORT}/v2/incidents \\
     -H 'Content-Type: application/json' \\
     -d '{"idempotency_key":"demo-1","name":"Checkout API will not start",
          "summary":"checkout-api pods are in CrashLoopBackOff in the checkout-demo namespace.",
@@ -248,7 +248,7 @@ Try:
     | jq -r '.incident.reference'
 
   # Read the analysis back off the incident
-  curl -s "http://127.0.0.1:${MOCK_PORT}/v2/incident_updates?incident_id=\$INC" \\
+  curl -s "http://127.0.0.1:${TEST_MOCK_PORT}/v2/incident_updates?incident_id=\$INC" \\
     | jq -r '.incident_updates[].message'
 
   # What actually is broken, for comparison

@@ -33,6 +33,13 @@ go test -run TestName ./path/to/package
 go tool golangci-lint run -c .golangci.yaml ./...
 ```
 
+Environment names follow one rule: **unprefixed is production** (the same names
+the bridge reads in a cluster), **`TEST_` is local-only** (the demo and the
+helper scripts, read by no binary). `OPENROUTER_API_KEY` is production but
+deployment-time — the bridge never reads it; the installer and the chart use it
+to build the cluster Secret HolmesGPT reads. Adding a knob that only the demo
+needs? Prefix it, or it will look like something a deployment must set.
+
 Local configuration is layered: your shell beats `.env` (gitignored, holds
 `OPENROUTER_API_KEY`) beats `.env.default` (committed). `hack/lib.sh` provides
 `load_dotenv`, which the scripts source so direct invocation matches `task`.

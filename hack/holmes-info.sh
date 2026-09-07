@@ -17,7 +17,7 @@ load_dotenv .env.default
 
 NAMESPACE="${HOLMES_NAMESPACE:-holmes}"
 RELEASE="${HOLMES_RELEASE:-holmes}"
-PORT="${HOLMES_INFO_PORT:-15051}"
+PORT="${TEST_HOLMES_INFO_PORT:-15051}"
 
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl is not installed" >&2; exit 1; }
 

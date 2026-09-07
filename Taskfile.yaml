@@ -109,7 +109,7 @@ tasks:
     vars:
       NAMESPACE: '{{ .HOLMES_NAMESPACE | default "holmes" }}'
       RELEASE: '{{ .HOLMES_RELEASE | default "holmes" }}'
-      PORT: '{{ .HOLMES_PORT | default "15050" }}'
+      PORT: '{{ .TEST_HOLMES_PORT | default "15050" }}'
     cmd: kubectl port-forward -n {{.NAMESPACE}} svc/{{.RELEASE}}-holmes {{.PORT}}:80
 
   demo:workload:
@@ -150,7 +150,7 @@ tasks:
       |--------------------|------------------------------------|---------|
       | `HOLMES_MODEL`     | modelList key to use               | `claude-sonnet` |
       | `HOLMES_URL`       | Use a Holmes reachable elsewhere   | port-forward |
-      | `SCENARIO`         | Mock scenario to load              | `checkout-crashloop` |
-      | `APPLY_WORKLOAD`   | Apply the broken workload          | `1` |
+      | `TEST_SCENARIO`    | Mock scenario to load              | `checkout-crashloop` |
+      | `TEST_APPLY_WORKLOAD`   | Apply the broken workload          | `1` |
     cmds:
       - ./hack/demo.sh

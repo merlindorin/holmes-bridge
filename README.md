@@ -102,6 +102,17 @@ in your OpenRouter key:
 cp .env.example .env
 ```
 
+Two rules for what belongs in it:
+
+- **Unprefixed names are production configuration** — the same names the bridge
+  reads in a cluster. What you put here is what you would put in a Secret.
+- **`TEST_` names exist only for the local demo** and the helper scripts. No
+  binary reads them, and nothing in a deployment does either.
+
+`OPENROUTER_API_KEY` sits in its own **deployment** section: it is a real
+credential, but the bridge never reads it — `task holmes:install` and the Helm
+chart use it to create the cluster Secret that HolmesGPT reads.
+
 Three layers, highest precedence first:
 
 | | File | Tracked | For |
@@ -136,9 +147,9 @@ One rule: **the local port is `1` + the conventional one**, because 8080 and
 
 | Service | Port | Override |
 |---|---|---|
-| `incidentio-mock` | `18080` | `--http-port` / `HTTP_PORT` / `MOCK_PORT` |
-| `holmes-bridge` | `18081` | `--http-port` / `HTTP_PORT` / `BRIDGE_PORT` |
-| HolmesGPT (port-forward) | `15050` | `HOLMES_PORT` |
+| `incidentio-mock` | `18080` | `--http-port` / `HTTP_PORT` / `TEST_MOCK_PORT` |
+| `holmes-bridge` | `18081` | `--http-port` / `HTTP_PORT` / `TEST_BRIDGE_PORT` |
+| HolmesGPT (port-forward) | `15050` | `TEST_HOLMES_PORT` |
 
 The Helm charts use the same numbers, so there is one port per service and no
 second set to remember. If something else already holds a port, the bind error

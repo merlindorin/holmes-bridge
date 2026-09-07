@@ -9,7 +9,7 @@
 #
 #   ./hack/send-webhook.sh                                   # local bridge
 #   ./hack/send-webhook.sh https://my-peer.example.com       # through a tunnel
-#   INCIDENT_ID=01ABC ./hack/send-webhook.sh                 # a specific incident
+#   TEST_INCIDENT_ID=01ABC ./hack/send-webhook.sh                 # a specific incident
 #
 # Set WEBHOOK_SECRET to whatever the bridge was started with.
 
@@ -22,30 +22,30 @@ source hack/lib.sh
 load_dotenv .env
 load_dotenv .env.default
 
-BRIDGE_URL="${1:-http://127.0.0.1:${BRIDGE_PORT:-18081}}"
-MOCK_URL="${MOCK_URL:-http://127.0.0.1:${MOCK_PORT:-18080}}"
+TEST_BRIDGE_URL="${1:-http://127.0.0.1:${TEST_BRIDGE_PORT:-18081}}"
+TEST_MOCK_URL="${TEST_MOCK_URL:-http://127.0.0.1:${TEST_MOCK_PORT:-18080}}"
 SECRET="${WEBHOOK_SECRET:-whsec_VEVTVC1NT0NLLU5PVC1BLVJFQUwtU0VDUkVUIQ==}"
-EVENT="${EVENT:-public_incident.incident_created_v2}"
+TEST_EVENT="${TEST_EVENT:-public_incident.incident_created_v2}"
 
 # Default to whatever the mock is serving, so the bridge can actually fetch the
 # incident it is told about. Override for a real org.
-INCIDENT_ID="${INCIDENT_ID:-}"
-if [[ -z "$INCIDENT_ID" ]]; then
-  INCIDENT_ID="$(curl -sf --max-time 10 "${MOCK_URL}/v2/incidents" 2>/dev/null \
+TEST_INCIDENT_ID="${TEST_INCIDENT_ID:-}"
+if [[ -z "$TEST_INCIDENT_ID" ]]; then
+  TEST_INCIDENT_ID="$(curl -sf --max-time 10 "${TEST_MOCK_URL}/v2/incidents" 2>/dev/null \
     | python3 -c 'import json,sys; print((json.load(sys.stdin).get("incidents") or [{}])[0].get("id",""))' 2>/dev/null || true)"
 fi
 
-if [[ -z "$INCIDENT_ID" ]]; then
+if [[ -z "$TEST_INCIDENT_ID" ]]; then
   echo "error: no incident to reference." >&2
-  echo "Start the mock, or pass one: INCIDENT_ID=01ABC $0 $BRIDGE_URL" >&2
+  echo "Start the mock, or pass one: TEST_INCIDENT_ID=01ABC $0 $TEST_BRIDGE_URL" >&2
   exit 1
 fi
 
-echo "POST ${BRIDGE_URL%/}/webhooks/incidentio"
-echo "  event:    $EVENT"
-echo "  incident: $INCIDENT_ID"
+echo "POST ${TEST_BRIDGE_URL%/}/webhooks/incidentio"
+echo "  event:    $TEST_EVENT"
+echo "  incident: $TEST_INCIDENT_ID"
 
-python3 - "$BRIDGE_URL" "$SECRET" "$EVENT" "$INCIDENT_ID" <<'PY'
+python3 - "$TEST_BRIDGE_URL" "$SECRET" "$TEST_EVENT" "$TEST_INCIDENT_ID" <<'PY'
 import base64, hashlib, hmac, json, subprocess, sys, time
 
 url, secret, event, incident = sys.argv[1:5]
