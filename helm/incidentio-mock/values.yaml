@@ -1,0 +1,57 @@
+# The mock is a development and CI tool. It holds no real data and requires no
+# credentials by default. Do not expose it publicly.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/merlindorin/incidentio-mock
+  pullPolicy: IfNotPresent
+  tag: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 18080
+
+mock:
+  # Scenario to load at boot. Empty picks the only one, or checkout-latency.
+  scenario: ""
+  # Bearer tokens the mock will accept. Empty accepts any request, which is
+  # usually what you want in a test namespace.
+  apiKeys: []
+  # Signs outbound webhooks. Must match the bridge's WEBHOOK_SECRET.
+  webhookSecret: whsec_VEVTVC1NT0NLLU5PVC1BLVJFQUwtU0VDUkVUIQ==
+  # Subscribers, as "name=..,url=..[,events=a|b]".
+  webhooks:
+    - name=bridge,url=http://holmes-bridge:18081/webhooks/incidentio
+
+# Extra scenarios, mounted over the built-in fixtures directory.
+extraScenarios: {}
+#  my-scenario.yaml: |
+#    name: my-scenario
+#    ...
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 20m
+    memory: 32Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

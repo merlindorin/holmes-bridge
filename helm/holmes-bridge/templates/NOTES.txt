@@ -1,0 +1,100 @@
+{{ .Chart.Name }} is deployed, running the {{ .Values.pipeline }} pipeline.
+
+{{- if eq .Values.pipeline "incidentio" }}
+
+  incident.io webhook ──▶ HolmesGPT ──▶ incident update
+
+1. Point incident.io at the bridge. Settings → Webhooks, targeting:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+{{- range .paths }}
+
+     http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}/webhooks/incidentio
+{{- end }}
+{{- end }}
+{{- else if .Values.expose.enabled }}
+
+     (published through holt — the URL is in the pod's startup log)
+
+     kubectl --namespace {{ .Release.Namespace }} logs -l app.kubernetes.io/name={{ include "holmes-bridge.name" . }} | grep webhook_url
+{{- else }}
+
+     (no ingress and no tunnel — incident.io cannot reach the bridge yet)
+
+     Enable ingress.enabled, or expose.enabled for a holt tunnel.
+{{- end }}
+
+   Subscribe it to:
+{{- range .Values.incidentio.triggers }}
+     - {{ . }}
+{{- end }}
+
+   Copy the signing secret into secrets.webhookSecret.
+{{- if not .Values.secrets.webhookSecret }}
+{{- if not .Values.secrets.existingSecret }}
+
+   ⚠  No webhook secret set. Deliveries cannot be verified and will be rejected.
+{{- end }}
+{{- end }}
+
+2. Write-back is "{{ .Values.investigation.writeBack }}".
+{{- if eq .Values.investigation.writeBack "update" }}
+   Analyses are posted onto incidents and mirrored into their Slack channels.
+   Set investigation.writeBack=none to run investigations and log them without
+   touching any incident, until you trust the answers.
+{{- end }}
+
+{{- else }}
+
+  Alertmanager webhook ──▶ HolmesGPT ──▶ ntfy notification
+
+  No incident.io involved: nothing is read from it and nothing written back.
+
+1. Point Alertmanager at the bridge:
+
+   receivers:
+     - name: holmes
+       webhook_configs:
+         - url: {{ if .Values.ingress.enabled }}{{ range $host := .Values.ingress.hosts }}http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ end }}{{ else }}http://{{ include "holmes-bridge.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ end }}/webhooks/alertmanager
+           send_resolved: true
+           http_config:
+             authorization:
+               type: Bearer
+               credentials: <secrets.alertmanagerToken>
+
+{{- if not .Values.secrets.alertmanagerToken }}
+{{- if not .Values.secrets.existingSecret }}
+
+   ⚠  No alertmanager token set. Alertmanager cannot sign its webhooks, so
+      anyone who can reach this endpoint can start investigations and spend
+      on a model. Set secrets.alertmanagerToken.
+{{- end }}
+{{- end }}
+
+2. The notification is this pipeline's only output.
+{{- if not .Values.ntfy.topic }}
+
+   ⚠  No ntfy topic set — there is nowhere for the analysis to go.
+      Set ntfy.topic and secrets.ntfyToken.
+{{- end }}
+
+{{- end }}
+
+{{- if .Values.holmes.enabled }}
+
+HolmesGPT is deployed alongside as a subchart, model "{{ .Values.holmesModel }}".
+{{- if not .Values.secrets.openrouterApiKey }}
+{{- if not .Values.secrets.existingSecret }}
+
+⚠  No OpenRouter key set. HolmesGPT has no model access and every investigation
+   will fail. Set secrets.openrouterApiKey.
+{{- end }}
+{{- end }}
+{{- else }}
+
+Using the HolmesGPT at {{ include "holmes-bridge.holmesUrl" . }}.
+{{- end }}
+
+Watch it work:
+
+  kubectl --namespace {{ .Release.Namespace }} logs -l app.kubernetes.io/name={{ include "holmes-bridge.name" . }} -f

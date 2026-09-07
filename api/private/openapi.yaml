@@ -1,0 +1,68 @@
+openapi: "3.0.3"
+info:
+  version: 1.0.0
+  title: Private API
+  description: |-
+    Operational endpoints served by both `incidentio-mock` and `holmes-bridge`.
+
+    These are never exposed publicly: they back Kubernetes probes.
+
+servers:
+  - url: /
+    description: private API v1
+
+security: []
+
+paths:
+  /liveness:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      description: Kubernetes liveness probe endpoint.
+      operationId: getLiveness
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+
+  /readiness:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Kubernetes readiness probe endpoint.
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+        '503':
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+
+components:
+  schemas:
+    ProbeResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          description: Per-dependency readiness detail, when a check fails.
+
+tags:
+  - name: Health
+    description: Health check and probe endpoints

@@ -1,0 +1,24 @@
+apiVersion: v2
+name: holmes-bridge
+description: Investigate incidents with HolmesGPT — from incident.io, or straight from Alertmanager
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/merlindorin/holmes-bridge
+sources:
+  - https://github.com/merlindorin/holmes-bridge
+maintainers:
+  - name: merlindorin
+keywords:
+  - incident.io
+  - holmesgpt
+  - alertmanager
+  - sre
+
+# HolmesGPT ships as a subchart so one `helm install` brings up the whole stack.
+# Set holmes.enabled=false to point the bridge at a HolmesGPT you already run.
+dependencies:
+  - name: holmes
+    version: "0.40.0"
+    repository: https://robusta-charts.storage.googleapis.com
+    condition: holmes.enabled

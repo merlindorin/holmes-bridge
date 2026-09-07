@@ -1,0 +1,10 @@
+FROM gcr.io/distroless/static-debian12
+
+COPY incidentio-mock /usr/bin/incidentio-mock
+COPY fixtures /fixtures
+
+ENV FIXTURES_DIR=/fixtures/scenarios
+
+ENTRYPOINT [ "/usr/bin/incidentio-mock" ]
+
+CMD ["serve"]

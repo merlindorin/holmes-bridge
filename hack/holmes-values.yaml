@@ -1,0 +1,79 @@
+# HolmesGPT values for a local kind cluster, backed by OpenRouter.
+#
+# Applied by `task holmes:install`, which also creates the holmes-openrouter
+# Secret from your OPENROUTER_API_KEY. Override any of this with
+# `HOLMES_VALUES=my-values.yaml task holmes:install`.
+#
+# Upstream chart: https://github.com/robusta-dev/holmesgpt/tree/master/helm/holmes
+
+# OpenRouter is reached through LiteLLM's native provider, which is what the
+# `openrouter/` model prefix selects. Holmes can then work out each model's
+# context window on its own — the OpenAI-compatible route cannot, and needs
+# OVERRIDE_MAX_CONTENT_SIZE set by hand.
+additionalEnvVars:
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: holmes-openrouter
+        key: openrouter-api-key
+  # Identifies this deployment on OpenRouter's dashboards.
+  - name: OR_APP_NAME
+    value: holmes-bridge
+
+# The key of the entry you want is what the bridge passes as HOLMES_MODEL, not
+# the `model:` string underneath it.
+modelList:
+  claude-sonnet:
+    api_key: "{{ env.OPENROUTER_API_KEY }}"
+    model: openrouter/anthropic/claude-sonnet-4.5
+    temperature: 1
+
+  gpt-4o:
+    api_key: "{{ env.OPENROUTER_API_KEY }}"
+    model: openrouter/openai/gpt-4o
+    temperature: 1
+
+  gemini-pro:
+    api_key: "{{ env.OPENROUTER_API_KEY }}"
+    model: openrouter/google/gemini-2.5-pro
+    temperature: 1
+
+# Toolsets are what turn Holmes from a chatbot into an investigator: without
+# them it answers from the prompt alone. These are the ones that work in a bare
+# kind cluster.
+toolsets:
+  kubernetes/core:
+    enabled: true
+  kubernetes/logs:
+    enabled: true
+  bash:
+    enabled: true
+    config:
+      builtin_allowlist: extended
+
+  # Off by default here: `robusta` needs a Robusta SaaS account, `internet`
+  # sends page contents to the model, and `prometheus/metrics` needs a
+  # Prometheus that a bare kind cluster does not have. Turn prometheus back on
+  # if you install kube-prometheus-stack.
+  robusta:
+    enabled: false
+  internet:
+    enabled: false
+  prometheus/metrics:
+    enabled: false
+
+# kind runs on a laptop; these are sized for that rather than for a real cluster.
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Holmes reads across the cluster to investigate. The chart's default role is
+# read-only, which is what we want — nothing here should be able to change your
+# cluster.
+enableAccountsCreate: false
+
+logLevel: INFO

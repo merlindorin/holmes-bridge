@@ -1,0 +1,143 @@
+name: checkout-crashloop
+description: >-
+  The scenario `task demo` uses, matched to the workload in
+  hack/demo-workload.yaml. checkout-api is in CrashLoopBackOff in the
+  checkout-demo namespace because postgres-primary has no endpoints. Everything
+  described here is genuinely true of the cluster, so a real HolmesGPT
+  investigation has evidence to find rather than an absent service to report on.
+
+identity:
+  name: TEST — incidentio-mock (not a real organisation)
+  # Deliberately not app.incident.io: nothing here should link to the real product.
+  dashboard_url: http://localhost:18080/_mock
+  roles: [incident_creator, incident_editor, viewer]
+
+severities:
+  - id: SEV1
+    name: Critical
+    description: Customer-facing outage with revenue impact.
+    rank: 3
+  - id: SEV2
+    name: Major
+    description: Significant degradation, workaround available.
+    rank: 2
+  - id: SEV3
+    name: Minor
+    description: Limited impact, no workaround needed.
+    rank: 1
+
+statuses:
+  - id: triage
+    name: Triage
+    description: We are working out what is going on.
+    category: triage
+    rank: 1
+  - id: investigating
+    name: Investigating
+    description: We know it is real and are digging in.
+    category: live
+    rank: 2
+  - id: monitoring
+    name: Monitoring
+    description: A fix is applied and we are watching.
+    category: live
+    rank: 3
+  - id: closed
+    name: Closed
+    description: Resolved.
+    category: closed
+    rank: 4
+
+roles:
+  - id: lead
+    name: Incident Lead
+    shortform: lead
+    description: Owns the response and makes the calls.
+    instructions: Coordinate, delegate, and keep the channel updated.
+    role_type: lead
+    required: true
+
+users:
+  - id: USR-MERLIN
+    name: Test Lead
+    email: lead@test.invalid
+    slack_user_id: U00TESTLEAD
+    role: owner
+
+catalog:
+  types:
+    - id: CT-SERVICE
+      name: Service
+      description: Everything we run in production.
+  entries:
+    - id: CE-CHECKOUT
+      type: CT-SERVICE
+      name: checkout-api
+      external_id: svc-checkout-api
+      aliases: [checkout, checkout-api]
+      rank: 10
+
+alerts:
+  - id: ALT-CRASHLOOP
+    source_id: 01MOCKKUBERNETES000000000
+    title: "checkout-api pods in CrashLoopBackOff"
+    status: firing
+    description: >-
+      Both replicas of deployment checkout-api in namespace checkout-demo are
+      restarting repeatedly. No pod has stayed ready since the last rollout.
+    deduplication_key: k8s-checkout-api-crashloop
+    created_at: "-18m"
+  - id: ALT-NOREADY
+    source_id: 01MOCKKUBERNETES000000000
+    title: "checkout-api has zero available replicas"
+    status: firing
+    description: >-
+      Deployment checkout-demo/checkout-api reports 0/2 replicas available.
+    deduplication_key: k8s-checkout-api-unavailable
+    created_at: "-16m"
+
+incidents:
+  - id: INC-CRASHLOOP
+    reference: TEST-201
+    external_id: 201
+    name: "[TEST] Checkout is completely down"
+    summary: >-
+      Every checkout request is failing. The checkout-api deployment in the
+      checkout-demo namespace has no available replicas and its pods are in
+      CrashLoopBackOff. This started shortly after the v2.31.0 rollout.
+    status: investigating
+    severity: SEV1
+    mode: standard
+    visibility: public
+    created_at: "-15m"
+    updated_at: "-4m"
+    slack_channel_id: C00TESTCHECKOUT
+    slack_channel_name: test-inc-201-checkout-down
+    permalink: http://localhost:18080/_mock/incidents/201
+    roles:
+      lead: USR-MERLIN
+    alerts: [ALT-CRASHLOOP, ALT-NOREADY]
+    updates:
+      - message: >-
+          Declared from a Kubernetes alert. checkout-api is in CrashLoopBackOff
+          in the checkout-demo namespace.
+        status: triage
+        severity: SEV1
+        created_at: "-15m"
+      - message: >-
+          Confirmed total customer impact — no checkout requests are being
+          served. Moving to investigating. We have not yet worked out why the
+          pods will not start.
+        status: investigating
+        updater: USR-MERLIN
+        created_at: "-10m"
+    timeline:
+      - title: Rollout of checkout-api v2.31.0
+        description: >-
+          Deployed shortly before the first alert. The change note mentions
+          database connection pool configuration.
+        timestamp: "-20m"
+        creator: USR-MERLIN
+      - title: First CrashLoopBackOff observed
+        description: Both replicas began restarting.
+        timestamp: "-18m"

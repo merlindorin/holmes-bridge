@@ -1,0 +1,47 @@
+# Runs the test suite, including the end-to-end loop in test/e2e.
+name: test
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        go: ["1.25"]
+        os: [ubuntu-latest, macos-latest]
+    name: test
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: test
+        run: go test -race ./...
+
+  generated:
+    name: generated code is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+      # The OpenAPI server and client are generated from the trimmed spec. If a
+      # regeneration produces a diff, the committed code is stale.
+      - name: regenerate
+        run: go generate ./api/...
+      - name: check for drift
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::generated code is out of date — run 'task generate' and commit the result"
+            exit 1
+          fi

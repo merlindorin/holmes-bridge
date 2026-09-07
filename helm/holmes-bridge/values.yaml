@@ -1,0 +1,206 @@
+# Which pipeline this release runs. They are separate flows, not two halves of
+# one — pick the one you want.
+#
+#   incidentio    incident.io webhook  → HolmesGPT → incident update
+#   alertmanager  Alertmanager webhook → HolmesGPT → ntfy notification
+#
+# The alertmanager pipeline needs no incident.io account at all.
+pipeline: incidentio
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/merlindorin/holmes-bridge
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 18081
+
+# The bridge receives webhooks, so it has to be reachable by whatever sends
+# them. Use an ingress, or the built-in holt tunnel below when there is no
+# ingress to have.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: holmes-bridge.example.com
+      paths:
+        - path: /webhooks
+          pathType: Prefix
+  tls: []
+
+# ─── HolmesGPT ───────────────────────────────────────────────────────────────
+#
+# Deployed as a subchart. Everything under this key goes to the upstream
+# robusta/holmes chart unchanged; see its values for the full surface.
+holmes:
+  enabled: true
+
+  # Model access. The API key comes from the Secret this chart creates, so it is
+  # written once here rather than in two places.
+  additionalEnvVars:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: holmes-bridge-credentials
+          key: openrouter-api-key
+
+  modelList:
+    claude-sonnet:
+      api_key: "{{ env.OPENROUTER_API_KEY }}"
+      model: openrouter/anthropic/claude-sonnet-4.5
+      temperature: 1
+
+  # The toolsets that work in a plain cluster. Turn prometheus back on if you
+  # run kube-prometheus-stack — an investigation with metrics is a better one.
+  toolsets:
+    kubernetes/core:
+      enabled: true
+    kubernetes/logs:
+      enabled: true
+    bash:
+      enabled: true
+      config:
+        builtin_allowlist: extended
+    robusta:
+      enabled: false
+    internet:
+      enabled: false
+    prometheus/metrics:
+      enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+# When holmes.enabled is false, point the bridge at an existing HolmesGPT.
+# Left empty, the chart addresses the subchart's own Service.
+holmesUrl: ""
+
+# Which entry of holmes.modelList to investigate with. This is the KEY, not the
+# provider's model string.
+holmesModel: claude-sonnet
+
+# ─── Investigation ───────────────────────────────────────────────────────────
+investigation:
+  # update | timeline | none. Start with `none` against a real org: the bridge
+  # investigates and logs, but writes nothing back.
+  writeBack: update
+  minSeverityRank: 0
+  maxConcurrent: 2
+  # Bounds the queue so a storm cannot build a backlog of stale analyses.
+  queueTimeout: 5m
+  # Leave an incident alone this long after investigating it. This is what stops
+  # the bridge reacting to its own write-back.
+  cooldown: 30m
+  attempts: 2
+  timeout: 10m
+
+# ─── incident.io pipeline ────────────────────────────────────────────────────
+incidentio:
+  url: https://api.incident.io
+  # Events that start an investigation. REPLACES the defaults rather than adding
+  # to them, so list every event you want.
+  triggers:
+    - public_incident.incident_created_v2
+    - public_incident.incident_status_updated_v2
+
+# ─── Alertmanager pipeline ───────────────────────────────────────────────────
+#
+# Alertmanager cannot sign its webhooks the way incident.io does, so the bearer
+# token is the whole of the authentication. Without one, anyone who can reach
+# the endpoint can start investigations and spend your model budget.
+# Set it in secrets.alertmanagerToken below.
+
+# ─── Notifications (ntfy) ────────────────────────────────────────────────────
+#
+# Required by the alertmanager pipeline, where the notification is the only
+# output. Optional for the incidentio pipeline, which writes to the incident.
+ntfy:
+  topic: ""
+  server: https://ntfy.sh
+  onFailure: true
+
+# ─── Publishing the webhook endpoint (holt) ──────────────────────────────────
+#
+# An alternative to an ingress: the bridge dials out to a holt hub and serves
+# its webhook route back down that connection. Useful where there is no inbound
+# path at all.
+expose:
+  enabled: false
+  peer: holmes-bridge
+  # Hub to enrol with. The join token goes in secrets.holtToken.
+  adminUrl: ""
+
+# ─── Credentials ─────────────────────────────────────────────────────────────
+#
+# Either put them here and let the chart create a Secret, or manage one yourself
+# and name it in existingSecret. The keys are the same either way.
+secrets:
+  existingSecret: ""
+
+  # HolmesGPT model access. Required whenever holmes.enabled is true.
+  openrouterApiKey: ""
+
+  # incident.io pipeline.
+  incidentioApiKey: ""
+  webhookSecret: ""
+
+  # Alertmanager pipeline.
+  alertmanagerToken: ""
+
+  # Notifications. A token only works against the server that issued it.
+  ntfyToken: ""
+
+  # holt join token, when expose.enabled is true.
+  holtToken: ""
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# An investigation runs for minutes; let one finish rather than killing it.
+terminationGracePeriodSeconds: 60
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}
+
+logLevel: info

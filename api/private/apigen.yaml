@@ -1,0 +1,7 @@
+package: private
+generate:
+  gin-server: true
+  models: true
+output-options:
+  skip-prune: true
+output: server.gen.go

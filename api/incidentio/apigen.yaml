@@ -1,0 +1,9 @@
+package: incidentio
+generate:
+  gin-server: true
+  client: true
+  models: true
+output-options:
+  # keep every schema, even ones only referenced from examples we stripped
+  skip-prune: true
+output: server.gen.go

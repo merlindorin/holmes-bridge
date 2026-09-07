@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "holmes-bridge.fullname" . }}
+  labels:
+    {{- include "holmes-bridge.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "holmes-bridge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if not .Values.secrets.existingSecret }}
+        # Roll the pods when the credentials change.
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+      labels:
+        {{- include "holmes-bridge.selectorLabels" . | nindent 8 }}
+        holmes-bridge/pipeline: {{ .Values.pipeline }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "holmes-bridge.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # An in-flight investigation runs for minutes; let it finish rather than
+      # killing the pod and leaving the incident without its analysis.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: holmes-bridge
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            {{- include "holmes-bridge.args" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 18081
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "18081"
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: HOLMES_URL
+              value: {{ include "holmes-bridge.holmesUrl" . | quote }}
+            - name: HOLMES_MODEL
+              value: {{ .Values.holmesModel | quote }}
+
+            # Investigation pacing. These bound spend and the load put on the
+            # cluster being inspected, not HolmesGPT, which parallelises fine.
+            - name: WRITE_BACK
+              value: {{ .Values.investigation.writeBack | quote }}
+            - name: MIN_SEVERITY_RANK
+              value: {{ .Values.investigation.minSeverityRank | quote }}
+            - name: MAX_CONCURRENT
+              value: {{ .Values.investigation.maxConcurrent | quote }}
+            - name: QUEUE_TIMEOUT
+              value: {{ .Values.investigation.queueTimeout | quote }}
+            - name: COOLDOWN
+              value: {{ .Values.investigation.cooldown | quote }}
+            - name: ATTEMPTS
+              value: {{ .Values.investigation.attempts | quote }}
+            - name: INVESTIGATION_TIMEOUT
+              value: {{ .Values.investigation.timeout | quote }}
+
+            {{- if eq .Values.pipeline "incidentio" }}
+            - name: INCIDENTIO_URL
+              value: {{ .Values.incidentio.url | quote }}
+            {{- end }}
+
+            {{- with .Values.ntfy.topic }}
+            - name: NTFY_TOPIC
+              value: {{ . | quote }}
+            {{- end }}
+            - name: NTFY_SERVER
+              value: {{ .Values.ntfy.server | quote }}
+            - name: NTFY_ON_FAILURE
+              value: {{ .Values.ntfy.onFailure | quote }}
+          envFrom:
+            # Carries INCIDENTIO_API_KEY, WEBHOOK_SECRET, ALERTMANAGER_TOKENS,
+            # NTFY_TOKEN and HOLT_TOKEN — whichever are set.
+            - secretRef:
+                name: {{ include "holmes-bridge.secretName" . }}
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            # Tracks HolmesGPT: with it down the bridge can accept a webhook but
+            # cannot do the one thing it exists for.
+            httpGet:
+              path: /readiness
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

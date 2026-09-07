@@ -1,0 +1,11 @@
+apiVersion: v2
+name: incidentio-mock
+description: A wire-compatible fake incident.io, for development and testing
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/merlindorin/holmes-bridge
+sources:
+  - https://github.com/merlindorin/holmes-bridge
+maintainers:
+  - name: merlindorin

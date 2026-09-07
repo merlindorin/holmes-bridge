@@ -1,0 +1,87 @@
+version: '3'
+
+vars:
+  DEFAULT_AGENT_MD_FILE: 'AGENT.md'
+  DEFAULT_SKIP_CLAUDE_MD: 'false'
+
+tasks:
+  default:
+    cmds:
+      - task: agent
+
+  pre-commit:
+    cmds:
+      - task: default
+
+  agent:
+    desc: Generate AGENT.md file
+    summary: |
+      Generate an AGENT.md file in the root of your project.
+
+      This file contains agent-specific instructions for Claude Code, such as:
+      - Project architecture and design decisions
+      - Development workflow and testing requirements
+      - Code standards and conventions specific to this project
+
+      By default, this task also generates a CLAUDE.md file containing @AGENT.md
+      for Claude Code compatibility. You can skip generating CLAUDE.md by setting
+      SKIP_CLAUDE_MD=true.
+
+      The following variables are available:
+
+      | VARIABLE            | DESCRIPTION                       | DEFAULT                           |
+      |---------------------|-----------------------------------|-----------------------------------|
+      | `AGENT_MD_FILE`     | Output filename for AGENT.md      | `{{.DEFAULT_AGENT_MD_FILE}}`      |
+      | `AGENT_MD_CONTENT`  | Content for AGENT.md              | Default template                  |
+      | `SKIP_CLAUDE_MD`    | Skip generating CLAUDE.md         | `{{.DEFAULT_SKIP_CLAUDE_MD}}`     |
+
+      Examples:
+        - `task {{.TASK}}` generates both AGENT.md and CLAUDE.md
+        - `SKIP_CLAUDE_MD=true task {{.TASK}}` generates only AGENT.md
+        - `AGENT_MD_FILE=.claude/AGENT.md task {{.TASK}}` generates in .claude directory
+    vars:
+      AGENT_MD_FILE: '{{.AGENT_MD_FILE | default .DEFAULT_AGENT_MD_FILE}}'
+      SKIP_CLAUDE_MD: '{{.SKIP_CLAUDE_MD | default .DEFAULT_SKIP_CLAUDE_MD}}'
+    status:
+      - test -f '{{.ROOT_DIR}}/{{.AGENT_MD_FILE}}'
+    cmds:
+      - echo "${AGENT_MD_CONTENT}" > '{{.ROOT_DIR}}/{{.AGENT_MD_FILE}}'
+      - |
+        if [ "{{.SKIP_CLAUDE_MD}}" != "true" ]; then
+          echo "@AGENT.md" > '{{.ROOT_DIR}}/CLAUDE.md'
+        fi
+    env:
+      AGENT_MD_CONTENT: |
+        # Agent-Specific Instructions
+
+        This file contains agent-specific instructions for working on this project.
+
+        ## Project Overview
+
+        - Brief description of the project
+        - Key technologies and frameworks used
+        - Important design decisions
+
+        ## Architecture
+
+        - Describe your project architecture here
+        - Include key design decisions
+        - Document important patterns and conventions
+
+        ## Development Workflow
+
+        - Describe your development workflow
+        - Include testing requirements
+        - Document any specific tooling or processes
+
+        ## Code Standards
+
+        - Define coding standards specific to this project
+        - Include style guide references
+        - Document any linting or formatting requirements
+
+        ## Testing
+
+        - Testing strategy and requirements
+        - How to run tests
+        - Coverage expectations

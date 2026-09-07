@@ -1,0 +1,218 @@
+name: checkout-latency
+description: >-
+  A live SEV1 on the checkout service: Prometheus is firing on p99 latency and
+  error rate, an incident has been declared and triaged, and nobody has worked
+  out why yet. This is the scenario the bridge is pointed at by default, because
+  it is the shape HolmesGPT is meant to be useful on.
+
+identity:
+  name: TEST — incidentio-mock (not a real organisation)
+  # Deliberately not app.incident.io: nothing here should link to the real product.
+  dashboard_url: http://localhost:18080/_mock
+  roles: [incident_creator, incident_editor, viewer]
+
+severities:
+  - id: SEV1
+    name: Critical
+    description: Customer-facing outage with revenue impact.
+    rank: 3
+  - id: SEV2
+    name: Major
+    description: Significant degradation, workaround available.
+    rank: 2
+  - id: SEV3
+    name: Minor
+    description: Limited impact, no workaround needed.
+    rank: 1
+
+statuses:
+  - id: triage
+    name: Triage
+    description: We are working out what is going on.
+    category: triage
+    rank: 1
+  - id: investigating
+    name: Investigating
+    description: We know it is real and are digging in.
+    category: live
+    rank: 2
+  - id: monitoring
+    name: Monitoring
+    description: A fix is applied and we are watching.
+    category: live
+    rank: 3
+  - id: closed
+    name: Closed
+    description: Resolved.
+    category: closed
+    rank: 4
+
+roles:
+  - id: lead
+    name: Incident Lead
+    shortform: lead
+    description: Owns the response and makes the calls.
+    instructions: Coordinate, delegate, and keep the channel updated.
+    role_type: lead
+    required: true
+  - id: comms
+    name: Communications
+    shortform: comms
+    description: Keeps stakeholders and the status page informed.
+    instructions: Post an update at least every 30 minutes.
+    role_type: custom
+
+users:
+  - id: USR-MERLIN
+    name: Test Lead
+    email: lead@test.invalid
+    slack_user_id: U00TESTLEAD
+    role: owner
+  - id: USR-AVA
+    name: Test Comms
+    email: comms@test.invalid
+    slack_user_id: U00TESTCOMMS
+    role: responder
+  - id: USR-SAM
+    name: Test Responder
+    email: responder@test.invalid
+    slack_user_id: U00TESTRESP
+    role: responder
+
+catalog:
+  types:
+    - id: CT-SERVICE
+      name: Service
+      description: Everything we run in production.
+      type_name: Custom["Service"]
+    - id: CT-TEAM
+      name: Team
+      description: Who owns what.
+      type_name: Custom["Team"]
+  entries:
+    - id: CE-CHECKOUT
+      type: CT-SERVICE
+      name: checkout-api
+      external_id: svc-checkout-api
+      aliases: [checkout, checkout-api, checkout-service]
+      rank: 10
+    - id: CE-PAYMENTS
+      type: CT-SERVICE
+      name: payments-api
+      external_id: svc-payments-api
+      aliases: [payments, payments-api]
+      rank: 20
+    - id: CE-POSTGRES
+      type: CT-SERVICE
+      name: postgres-primary
+      external_id: svc-postgres-primary
+      aliases: [postgres, db, primary-db]
+      rank: 30
+    - id: CE-TEAM-CHECKOUT
+      type: CT-TEAM
+      name: Checkout
+      external_id: team-checkout
+      aliases: [checkout-team]
+      rank: 10
+
+alerts:
+  - id: ALT-LATENCY
+    source_id: 01MOCKPROMETHEUS0000000000
+    title: "checkout-api p99 latency above 2s for 10m"
+    status: firing
+    description: >-
+      histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{service="checkout-api"}[5m]))
+      has been above the 2s objective for 10 minutes.
+    deduplication_key: prom-checkout-latency-p99
+    source_url: https://prometheus.example.com/graph?g0.expr=checkout_latency_p99
+    created_at: "-42m"
+  - id: ALT-ERRORS
+    source_id: 01MOCKPROMETHEUS0000000000
+    title: "checkout-api 5xx rate above 5%"
+    status: firing
+    description: >-
+      rate(http_requests_total{service="checkout-api",status=~"5.."}[5m]) is 6.8% of all requests.
+    deduplication_key: prom-checkout-5xx
+    source_url: https://prometheus.example.com/graph?g0.expr=checkout_5xx
+    created_at: "-38m"
+  - id: ALT-DBCONN
+    source_id: 01MOCKPROMETHEUS0000000000
+    title: "postgres-primary connection pool saturated"
+    status: firing
+    description: >-
+      pg_stat_activity count is at 98/100 configured connections on postgres-primary.
+    deduplication_key: prom-postgres-pool
+    source_url: https://prometheus.example.com/graph?g0.expr=pg_pool
+    created_at: "-35m"
+
+incidents:
+  - id: INC-CHECKOUT
+    reference: TEST-142
+    external_id: 142
+    name: "[TEST] Checkout latency spike and elevated 5xx"
+    summary: >-
+      Customers are seeing slow checkouts and intermittent failures. p99 latency
+      on checkout-api crossed 2s at 14:02 and the 5xx rate followed shortly
+      after. The connection pool on postgres-primary is saturated, which may be
+      cause or symptom.
+    status: investigating
+    severity: SEV1
+    mode: standard
+    visibility: public
+    created_at: "-40m"
+    updated_at: "-5m"
+    slack_channel_id: C00TESTCHECKOUT
+    slack_channel_name: test-inc-142-checkout-latency
+    permalink: http://localhost:18080/_mock/incidents/142
+    roles:
+      lead: USR-MERLIN
+      comms: USR-AVA
+    alerts: [ALT-LATENCY, ALT-ERRORS, ALT-DBCONN]
+    updates:
+      - message: Declared from a Prometheus alert on checkout-api p99 latency.
+        status: triage
+        severity: SEV2
+        created_at: "-40m"
+      - message: >-
+          Confirmed customer impact from the 5xx rate. Raising to SEV1 and
+          moving to investigating.
+        status: investigating
+        severity: SEV1
+        updater: USR-MERLIN
+        created_at: "-30m"
+      - message: >-
+          postgres-primary connection pool is saturated at 98/100. Checking
+          whether a deploy changed pool sizing.
+        status: investigating
+        updater: USR-SAM
+        created_at: "-12m"
+    timeline:
+      - title: Prometheus alert fired
+        description: checkout-api p99 latency crossed the 2s objective.
+        timestamp: "-42m"
+      - title: Deploy of checkout-api v2.31.0
+        description: >-
+          Rolled out 8 minutes before the alert fired. Changed the database
+          connection pool configuration.
+        timestamp: "-50m"
+        creator: USR-SAM
+
+  - id: INC-STALE-CACHE
+    reference: TEST-141
+    external_id: 141
+    name: "[TEST] Stale product images on the CDN"
+    summary: Some product images served the previous revision for about an hour.
+    status: closed
+    severity: SEV3
+    mode: standard
+    visibility: public
+    created_at: "-3d"
+    updated_at: "-2d"
+    slack_channel_id: C00TESTCDN
+    slack_channel_name: test-inc-141-stale-cdn
+    roles:
+      lead: USR-AVA
+    updates:
+      - message: Cache purged, images are current again.
+        status: closed
+        created_at: "-2d"

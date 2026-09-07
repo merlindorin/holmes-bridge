@@ -1,0 +1,21 @@
+.git
+.gitignore
+.idea
+*.md
+Dockerfile
+Dockerfile.mock
+.dockerignore
+
+# Never let local secrets into a build context. The images take their
+# configuration from the environment at runtime, so nothing here is needed.
+.env
+.env.*
+.envrc
+
+# Development-only.
+bin
+.task
+.tk
+helm
+hack
+test

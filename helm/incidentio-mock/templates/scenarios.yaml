@@ -1,0 +1,13 @@
+{{- if .Values.extraScenarios }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "incidentio-mock.fullname" . }}-scenarios
+  labels:
+    {{- include "incidentio-mock.labels" . | nindent 4 }}
+data:
+  {{- range $name, $content := .Values.extraScenarios }}
+  {{ $name }}: |
+    {{- $content | nindent 4 }}
+  {{- end }}
+{{- end }}

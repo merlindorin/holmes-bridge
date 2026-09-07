@@ -1,0 +1,163 @@
+version: '3'
+
+includes:
+    claude: .tk/claude/Taskfile.yaml #!tk
+    default: .tk/default/Taskfile.yaml
+    git: .tk/git/Taskfile.yaml
+    golangci: .tk/golangci/Taskfile.yaml
+    install: .tk/install/Taskfile.yaml
+
+    # goreleaser and license are release-time only, and both resolve the
+    # project name through `gh repo view` in an eager `sh:` var. Task
+    # evaluates those at parse time, so including them before this repo has a
+    # GitHub origin breaks *every* task, not just theirs. Restore both once
+    # the repo is pushed:
+    #
+    #   goreleaser: .tk/goreleaser/Taskfile.yaml
+    #   license: .tk/license/Taskfile.yaml
+
+dotenv:
+  - .env
+  - PROJECT
+  - .env.default
+
+tasks:
+  generate:
+    desc: Regenerate the OpenAPI server and client
+    cmds:
+      - go generate ./api/...
+
+  spec:refresh:
+    desc: Re-trim the incident.io spec from upstream and regenerate
+    summary: |
+      Downloads the current https://api.incident.io/v1/openapiV3.json, trims it
+      to the operations this repo implements, and regenerates the Go code.
+
+      Run this when incident.io ships a schema change you need. Review the diff
+      to api/incidentio/openapi.yaml before committing: a changed wire type is
+      the whole point of tracking it.
+    cmds:
+      - python3 hack/trim-spec.py
+      - task: generate
+
+  test:
+    desc: Run the full test suite
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run the test suite under the race detector
+    cmds:
+      - go test -race ./...
+
+  build:
+    desc: Build both binaries into ./bin
+    cmds:
+      - go build -o bin/incidentio-mock ./cmd/incidentio-mock
+      - go build -o bin/holmes-bridge ./cmd/holmes-bridge
+
+  holmes:install:
+    desc: Install HolmesGPT into the current cluster, backed by OpenRouter
+    summary: |
+      Installs the upstream robusta/holmes chart into whatever cluster kubectl
+      is pointed at, wiring it to OpenRouter.
+
+      You create the cluster; this does not:
+
+        kind create cluster --name holmes
+        export OPENROUTER_API_KEY=sk-or-...
+        task holmes:install
+
+      Refuses to run against a context that does not look local, unless you pass
+      ALLOW_REMOTE_CLUSTER=1 — the chart grants Holmes cluster-wide read access.
+
+      | VARIABLE                | DESCRIPTION                     | DEFAULT |
+      |-------------------------|---------------------------------|---------|
+      | `OPENROUTER_API_KEY`    | OpenRouter key (required)       | – |
+      | `HOLMES_NAMESPACE`      | Namespace to install into       | `holmes` |
+      | `HOLMES_RELEASE`        | Helm release name               | `holmes` |
+      | `HOLMES_VALUES`         | Values file                     | `hack/holmes-values.yaml` |
+      | `HOLMES_CHART_VERSION`  | Pin a chart version             | latest |
+      | `ALLOW_REMOTE_CLUSTER`  | Allow a non-local context       | `0` |
+    cmds:
+      - ./hack/install-holmes.sh
+
+  holmes:uninstall:
+    desc: Remove HolmesGPT from the current cluster
+    vars:
+      NAMESPACE: '{{ .HOLMES_NAMESPACE | default "holmes" }}'
+      RELEASE: '{{ .HOLMES_RELEASE | default "holmes" }}'
+    cmds:
+      - helm uninstall {{.RELEASE}} --namespace {{.NAMESPACE}} --ignore-not-found
+      - kubectl delete namespace {{.NAMESPACE}} --ignore-not-found
+
+  holmes:status:
+    desc: Show what HolmesGPT is running, and which models and toolsets came up
+    summary: |
+      Port-forwards briefly and reads /api/info. Use this to check that your
+      OpenRouter key works and that the Kubernetes toolsets are healthy before
+      spending a real investigation on them.
+    vars:
+      NAMESPACE: '{{ .HOLMES_NAMESPACE | default "holmes" }}'
+      RELEASE: '{{ .HOLMES_RELEASE | default "holmes" }}'
+    cmds:
+      - kubectl get pods -n {{.NAMESPACE}} -l app=holmes
+      - ./hack/holmes-info.sh
+
+  holmes:logs:
+    desc: Tail the HolmesGPT logs
+    vars:
+      NAMESPACE: '{{ .HOLMES_NAMESPACE | default "holmes" }}'
+      RELEASE: '{{ .HOLMES_RELEASE | default "holmes" }}'
+    cmd: kubectl logs -n {{.NAMESPACE}} deployment/{{.RELEASE}}-holmes -f --tail 100
+
+  holmes:port-forward:
+    desc: Forward HolmesGPT to localhost:15050
+    vars:
+      NAMESPACE: '{{ .HOLMES_NAMESPACE | default "holmes" }}'
+      RELEASE: '{{ .HOLMES_RELEASE | default "holmes" }}'
+      PORT: '{{ .HOLMES_PORT | default "15050" }}'
+    cmd: kubectl port-forward -n {{.NAMESPACE}} svc/{{.RELEASE}}-holmes {{.PORT}}:80
+
+  demo:workload:
+    desc: Apply the deliberately broken workload the demo investigates
+    summary: |
+      Creates the checkout-demo namespace with a checkout-api deployment that
+      crashloops because postgres-primary has no endpoints. This is what gives
+      HolmesGPT something real to find.
+    cmd: kubectl apply -f hack/demo-workload.yaml
+
+  demo:workload:delete:
+    desc: Remove the broken demo workload
+    cmd: kubectl delete -f hack/demo-workload.yaml --ignore-not-found
+
+  webhook:send:
+    desc: Send a correctly-signed incident.io webhook to the bridge
+    summary: |
+      Verifies the receiving end without waiting for a real incident. Computes
+      the Standard Webhooks signature so a 401 means a secret mismatch rather
+      than a mistake in your curl.
+
+        task webhook:send                                    # local bridge
+        task webhook:send -- https://my-peer.example.com     # through a tunnel
+    cmd: ./hack/send-webhook.sh {{.CLI_ARGS}}
+
+  demo:
+    desc: Run the whole loop against the HolmesGPT in your cluster
+    summary: |
+      Brings up the incident.io mock and the bridge, port-forwards to the
+      HolmesGPT installed by `task holmes:install`, applies the broken demo
+      workload, and prints what to curl. Ctrl-C stops everything and leaves the
+      cluster alone.
+
+      Investigations call a real model through OpenRouter, so they take a minute
+      or two and cost money.
+
+      | VARIABLE           | DESCRIPTION                        | DEFAULT |
+      |--------------------|------------------------------------|---------|
+      | `HOLMES_MODEL`     | modelList key to use               | `claude-sonnet` |
+      | `HOLMES_URL`       | Use a Holmes reachable elsewhere   | port-forward |
+      | `SCENARIO`         | Mock scenario to load              | `checkout-crashloop` |
+      | `APPLY_WORKLOAD`   | Apply the broken workload          | `1` |
+    cmds:
+      - ./hack/demo.sh

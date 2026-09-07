@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "incidentio-mock.fullname" . }}
+  labels:
+    {{- include "incidentio-mock.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "incidentio-mock.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "incidentio-mock.selectorLabels" . | nindent 8 }}
+      {{- if .Values.extraScenarios }}
+      annotations:
+        checksum/scenarios: {{ include (print $.Template.BasePath "/scenarios.yaml") . | sha256sum }}
+      {{- end }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: incidentio-mock
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            {{- range .Values.mock.webhooks }}
+            - --webhook={{ . }}
+            {{- end }}
+            {{- range .Values.mock.apiKeys }}
+            - --api-key={{ . }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 18080
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "18080"
+            - name: WEBHOOK_SECRET
+              value: {{ .Values.mock.webhookSecret | quote }}
+            {{- with .Values.mock.scenario }}
+            - name: SCENARIO
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.extraScenarios }}
+            - name: FIXTURES_DIR
+              value: /scenarios
+            {{- end }}
+          {{- if .Values.extraScenarios }}
+          volumeMounts:
+            - name: scenarios
+              mountPath: /scenarios
+          {{- end }}
+          livenessProbe:
+            httpGet: {path: /liveness, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: {path: /readiness, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.extraScenarios }}
+      volumes:
+        - name: scenarios
+          configMap:
+            name: {{ include "incidentio-mock.fullname" . }}-scenarios
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

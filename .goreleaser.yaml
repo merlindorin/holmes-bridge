@@ -1,0 +1,97 @@
+# Adapted from the `goreleaser:boilerplate` output; this repo ships two binaries
+# rather than one, so builds and dockers are duplicated per command.
+
+project_name: holmes-bridge
+
+release:
+  github:
+    owner: merlindorin
+    name: holmes-bridge
+
+builds:
+  - id: holmes-bridge
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    main: ./cmd/holmes-bridge
+    binary: holmes-bridge
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{ .CommitDate }} -X main.buildSource={{ .GitURL }}
+
+  - id: incidentio-mock
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    main: ./cmd/incidentio-mock
+    binary: incidentio-mock
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{ .CommitDate }} -X main.buildSource={{ .GitURL }}
+
+gomod:
+  proxy: false
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}-checksums.txt'
+
+source:
+  enabled: true
+
+sboms:
+  - artifacts: archive
+  - id: source
+    artifacts: source
+
+signs:
+  - cmd: cosign
+    env: [COSIGN_EXPERIMENTAL=1]
+    certificate: '${artifact}.pem'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+dockers:
+  - id: holmes-bridge
+    ids: [holmes-bridge, incidentio-mock]
+    image_templates:
+      - 'ghcr.io/merlindorin/holmes-bridge:{{ .Tag }}'
+    dockerfile: Dockerfile
+    extra_files: [fixtures]
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name=holmes-bridge"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.description=Investigate incident.io incidents with HolmesGPT"
+      - "--label=org.opencontainers.image.source=https://github.com/merlindorin/holmes-bridge"
+
+  - id: incidentio-mock
+    ids: [incidentio-mock]
+    image_templates:
+      - 'ghcr.io/merlindorin/incidentio-mock:{{ .Tag }}'
+    dockerfile: Dockerfile.mock
+    extra_files: [fixtures]
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name=incidentio-mock"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.description=A fake incident.io for development and testing"
+      - "--label=org.opencontainers.image.source=https://github.com/merlindorin/holmes-bridge"
+
+docker_signs:
+  - cmd: cosign
+    env: [COSIGN_EXPERIMENTAL=1]
+    artifacts: images
+    output: true
+    args: ['sign', '${artifact}', "--yes"]
