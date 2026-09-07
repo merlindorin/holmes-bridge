@@ -1,4 +1,6 @@
-package commands
+// Package investigation carries the settings that decide what gets
+// investigated, how hard the bridge tries, and what happens to the answer.
+package investigation
 
 import (
 	"fmt"
@@ -7,8 +9,8 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/app/investigate"
 )
 
-// groupInvestigation titles these flags in --help.
-const groupInvestigation = "investigation"
+// Group titles these flags in --help.
+const Group = "investigation"
 
 // Investigation is how the bridge decides what to investigate, how hard to try,
 // and what to do with the answer.
@@ -28,8 +30,8 @@ type Investigation struct {
 	Timeout time.Duration `name:"investigation-timeout" env:"INVESTIGATION_TIMEOUT" group:"investigation" help:"Bound on a single investigation" default:"10m"`
 }
 
-// config converts the flags into the service's configuration.
-func (o *Investigation) config() (investigate.Config, error) {
+// Config converts the flags into the service's configuration.
+func (o *Investigation) Config() (investigate.Config, error) {
 	writeBack := investigate.WriteBack(o.WriteBack)
 	if !writeBack.Valid() {
 		return investigate.Config{}, fmt.Errorf(

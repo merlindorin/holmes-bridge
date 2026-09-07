@@ -152,8 +152,8 @@ at once. The slot wait is bounded by `QueueTimeout` — without it, webhook-driv
 investigations (whose context is never cancelled) queue indefinitely and a storm
 becomes a backlog of stale analyses.
 
-**There are two pipelines, sharing one engine.** `serve` is incident.io in and
-incident.io out; `ntfy serve` is Alertmanager in and a notification out, with no
+**There are two pipelines, sharing one engine.** `incidentio serve` is incident.io
+in and incident.io out; `ntfy serve` is Alertmanager in and a notification out, with no
 incident.io client at all (the service tolerates a nil one because only the
 incident path uses it). Both go through `Service.guarded`, which owns the
 per-subject claim, the cooldown, the slot budget, metrics and the notification —
@@ -166,10 +166,10 @@ offers only `http_config.authorization`. So `--alertmanager-token` is the whole
 of the authentication, and a reachable endpoint without one is open. Dedup keys
 off Alertmanager's `groupKey`, which is stable across re-notifications.
 
-**Each integration has a subcommand.** `incidentio identity|incidents|show` and
+**Each pipeline owns its subcommands.** `incidentio identity|incidents|show` and
 `ntfy config|test` exist so a single integration can be checked without running
 an investigation. They embed the same option groups the daemon uses, so what
-they exercise is the same code path — `ntfy test` uses `Ntfy.client()` rather
+they exercise is the same code path — `ntfy test` uses `Ntfy.Client()` rather
 than the notifier, because the notifier swallows publish errors by design.
 
 **Only the webhook is inbound.** The bridge calls the incident.io API,
@@ -179,7 +179,7 @@ tunnel publishes only `/webhooks/incidentio` by default. `.env` and `--help` are
 both grouped by direction to keep that clear.
 
 **`--expose` needs subdomain routing.** The bridge can publish its webhook
-endpoint through a holt reverse tunnel (`cmd/holmes-bridge/commands/expose.go`,
+endpoint through a holt reverse tunnel (`cmd/holmes-bridge/commands/expose/expose.go`,
 built on `holt/pkg/expose`). incident.io sends a fixed set of headers, so a
 header-routed hub can never address this peer — `webhookURL` rejects that at
 startup rather than letting every delivery miss. The peer id is deliberately

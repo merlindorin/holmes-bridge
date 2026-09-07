@@ -1,10 +1,9 @@
-package commands
+package ntfy
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
@@ -13,20 +12,20 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/infra/ntfy"
 )
 
-// NtfyCmd groups the notification commands.
+// Cmd groups the notification commands.
 //
 // Notifications are the one integration whose failures are invisible during
 // normal operation: a push that does not go out is logged and dropped, because
 // it must never fail an investigation. These commands make that path testable
 // on its own, before a real incident depends on it.
-type NtfyCmd struct {
-	Serve  NtfyServe  `cmd:"" help:"Receive Alertmanager webhooks, investigate, and push the result to ntfy"`
-	Test   NtfyTest   `cmd:"" help:"Send a test notification and report whether it was accepted"`
-	Config NtfyConfig `cmd:"" help:"Show the resolved ntfy settings, without publishing anything"`
+type Cmd struct {
+	Serve  Serve  `cmd:"" help:"Receive Alertmanager webhooks, investigate, and push the result to ntfy"`
+	Test   Test   `cmd:"" help:"Send a test notification and report whether it was accepted"`
+	Config Config `cmd:"" help:"Show the resolved ntfy settings, without publishing anything"`
 }
 
-// NtfyTest publishes one notification and says exactly what happened.
-type NtfyTest struct {
+// Test publishes one notification and says exactly what happened.
+type Test struct {
 	Ntfy `embed:""`
 
 	Message string `help:"Body of the test notification" default:"Test notification from holmes-bridge. If you can read this, notifications are working."`
@@ -35,14 +34,16 @@ type NtfyTest struct {
 }
 
 // Run publishes the test notification.
-func (c *NtfyTest) Run(
-	ctx context.Context, _ *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer,
+func (c *Test) Run(
+	ctx context.Context, common *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer,
 ) error {
+	printer := common.Printer()
+
 	if c.Topic == "" {
 		return errors.New("no topic set: pass --ntfy-topic, or set NTFY_TOPIC in .env")
 	}
 
-	client, err := c.Ntfy.client()
+	client, err := c.Ntfy.Client()
 	if err != nil {
 		return err
 	}
@@ -69,7 +70,7 @@ func (c *NtfyTest) Run(
 		return fmt.Errorf("the notification was not accepted: %w", publishErr)
 	}
 
-	fmt.Fprintf(os.Stdout, "Published to %s/%s\nCheck the device subscribed to that topic.\n",
+	printer.Printf("Published to %s/%s\nCheck the device subscribed to that topic.\n",
 		client.Server(), client.Topic())
 
 	return nil
@@ -78,16 +79,18 @@ func (c *NtfyTest) Run(
 // authNone is how the config command reports that no credentials are set.
 const authNone = "none"
 
-// NtfyConfig prints what the settings resolve to, publishing nothing.
-type NtfyConfig struct {
+// Config prints what the settings resolve to, publishing nothing.
+type Config struct {
 	Ntfy `embed:""`
 }
 
 // Run reports the resolved configuration.
-func (c *NtfyConfig) Run(_ *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer) error {
+func (c *Config) Run(common *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer) error {
+	printer := common.Printer()
+
 	if c.Topic == "" {
-		fmt.Fprintln(os.Stdout, "Notifications are OFF: no topic set.")
-		fmt.Fprintln(os.Stdout, "Set --ntfy-topic, or NTFY_TOPIC in .env, to enable them.")
+		printer.Println("Notifications are OFF: no topic set.")
+		printer.Println("Set --ntfy-topic, or NTFY_TOPIC in .env, to enable them.")
 
 		return nil
 	}
@@ -101,22 +104,20 @@ func (c *NtfyConfig) Run(_ *cmd.Commons, _ *globals.HTTPServer, _ *globals.Metri
 		auth = "basic (" + c.User + ")"
 	}
 
-	fmt.Fprintf(os.Stdout, "server:      %s\n", c.server())
-	fmt.Fprintf(os.Stdout, "topic:       %s\n", c.Topic)
-	fmt.Fprintf(os.Stdout, "auth:        %s\n", auth)
-	fmt.Fprintf(os.Stdout, "on failure:  %t\n", c.OnFailure)
+	printer.Printf("server:      %s\n", c.server())
+	printer.Printf("topic:       %s\n", c.Topic)
+	printer.Printf("auth:        %s\n", auth)
+	printer.Printf("on failure:  %t\n", c.OnFailure)
 
 	// The two configurations that reject every push.
 	if auth == authNone {
-		fmt.Fprintln(os.Stdout,
-			"\nwarning: most servers require credentials to publish. Set --ntfy-token.")
+		printer.Println("\nwarning: most servers require credentials to publish. Set --ntfy-token.")
 	}
 
 	if c.Token != "" && c.server() == ntfy.DefaultServer {
-		fmt.Fprintln(os.Stdout,
-			"\nwarning: a token is set but the server is the public default. A token only\n"+
-				"works against the server that issued it — set --ntfy-server if this token\n"+
-				"is for a self-hosted ntfy.")
+		printer.Println("\nwarning: a token is set but the server is the public default. A token only\n" +
+			"works against the server that issued it — set --ntfy-server if this token\n" +
+			"is for a self-hosted ntfy.")
 	}
 
 	return nil

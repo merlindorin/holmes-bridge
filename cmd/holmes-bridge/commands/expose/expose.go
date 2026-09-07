@@ -1,4 +1,6 @@
-package commands
+// Package expose publishes a pipeline's webhook endpoint through a holt reverse
+// tunnel, and announces the URL to register with whatever delivers to it.
+package expose
 
 import (
 	"context"
@@ -8,15 +10,17 @@ import (
 
 	"github.com/openotters/holt/pkg/expose"
 	"go.uber.org/zap"
+
+	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/serving"
 )
 
-// groupExpose titles these flags in --help.
-const groupExpose = "expose"
+// Group titles these flags in --help.
+const Group = "expose"
 
-// webhookPath is the route incident.io delivers to. It is also what gets
+// WebhookPath is the route incident.io delivers to. It is also what gets
 // appended to the tunnel address, so the logged URL is one you can paste
 // straight into incident.io rather than a base you have to complete.
-const webhookPath = "/webhooks/incidentio"
+const WebhookPath = "/webhooks/incidentio"
 
 // Expose groups the holt options. holt is a reverse HTTP tunnel: the bridge
 // dials out to a hub and serves its handler back down that connection, so
@@ -37,6 +41,38 @@ type Expose struct {
 	AdminURL string `name:"expose-admin-url" env:"EXPOSE_ADMIN_URL" group:"expose" help:"Enroll against this hub instead of the profile's admin_url."`
 
 	All bool `name:"expose-all" env:"EXPOSE_ALL" group:"expose" help:"Publish every route through the tunnel, including the unauthenticated POST /investigations/{id}. Development only."`
+}
+
+// EnrollFor opens the tunnel when --expose is set and announces the URL for the
+// given path, returning the peer for the caller to serve. It returns
+// (nil, nil) when exposure is off.
+//
+// The path differs per pipeline — incident.io delivers to one route and
+// Alertmanager to another — but everything else about enrolling is the same.
+//
+// Enrolment is deliberately separate from serving: it happens once, before
+// anything is listening, so the URL is part of startup output and its failures
+// are not entangled with the servers'.
+func (e *Expose) EnrollFor(
+	ctx context.Context, logger *zap.Logger, handler http.Handler, path string,
+) (*expose.Peer, error) {
+	if !e.Enabled {
+		return nil, nil //nolint:nilnil // "no tunnel, no error" is the honest result
+	}
+
+	peer, err := e.tunnel(ctx, logger, handler)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := webhookURL(peer, path)
+	if err != nil {
+		return nil, err
+	}
+
+	announce(logger, peer, url, path)
+
+	return peer, nil
 }
 
 // tunnel enrolls with the hub and returns the peer, without dialing yet.
@@ -73,41 +109,9 @@ func (e *Expose) tunnel(ctx context.Context, logger *zap.Logger, handler http.Ha
 	return peer, nil
 }
 
-// enrollFor opens the tunnel when --expose is set and announces the URL for the
-// given path, returning the peer for the caller to serve. It returns
-// (nil, nil) when exposure is off.
-//
-// The path differs per pipeline — incident.io delivers to one route and
-// Alertmanager to another — but everything else about enrolling is the same.
-func (e *Expose) enrollFor(
-	ctx context.Context, logger *zap.Logger, handler http.Handler, path string,
-) (*expose.Peer, error) {
-	if !e.Enabled {
-		return nil, nil //nolint:nilnil // "no tunnel, no error" is the honest result
-	}
-
-	peer, err := e.tunnel(ctx, logger, handler)
-	if err != nil {
-		return nil, err
-	}
-
-	url, err := webhookURLFor(peer, path)
-	if err != nil {
-		return nil, err
-	}
-
-	announceFor(logger, peer, url, path)
-
-	return peer, nil
-}
-
-// webhookURL is the address to register in incident.io, or an error explaining
+// webhookURL is the address to register with the sender, or an error explaining
 // why this tunnel cannot serve one.
-func webhookURL(peer *expose.Peer) (string, error) {
-	return webhookURLFor(peer, webhookPath)
-}
-
-func webhookURLFor(peer *expose.Peer, path string) (string, error) {
+func webhookURL(peer *expose.Peer, path string) (string, error) {
 	// Header routing means the hub picks the peer from a request header rather
 	// than the hostname. incident.io sends its webhooks with a fixed set of
 	// headers and offers no way to add one, so such a tunnel can never route a
@@ -134,18 +138,14 @@ func webhookURLFor(peer *expose.Peer, path string) (string, error) {
 
 // announce prints the URL where it cannot be missed. This is the one piece of
 // output the flag exists to produce, and it competes with structured logs.
-func announce(logger *zap.Logger, peer *expose.Peer, url string) {
-	announceFor(logger, peer, url, webhookPath)
-}
-
-func announceFor(logger *zap.Logger, peer *expose.Peer, url, path string) {
+func announce(logger *zap.Logger, peer *expose.Peer, url, path string) {
 	logger.Info("webhook endpoint published through holt",
 		zap.String("peer", peer.Name),
 		zap.String("hub", peer.TunnelURL),
 		zap.String("webhook_url", url))
 
-	if path == webhookPath {
-		fmt.Fprintf(banner(), `
+	if path == WebhookPath {
+		fmt.Fprintf(serving.Banner(), `
   ┌─ holt tunnel ────────────────────────────────────────────────
   │
   │  Register this URL in incident.io (Settings → Webhooks):
@@ -165,7 +165,7 @@ func announceFor(logger *zap.Logger, peer *expose.Peer, url, path string) {
 		return
 	}
 
-	fmt.Fprintf(banner(), `
+	fmt.Fprintf(serving.Banner(), `
   ┌─ holt tunnel ────────────────────────────────────────────────
   │
   │  Point Alertmanager at this URL:

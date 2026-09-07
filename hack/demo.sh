@@ -201,7 +201,7 @@ echo "starting incident.io mock on :${TEST_MOCK_PORT} (scenario: ${TEST_SCENARIO
 pids+=($!)
 
 echo "starting holmes-bridge on :${TEST_BRIDGE_PORT}"
-./bin/holmes-bridge serve \
+./bin/holmes-bridge incidentio serve \
   --http-port "${TEST_BRIDGE_PORT}" \
   --incidentio-url "http://127.0.0.1:${TEST_MOCK_PORT}" \
   --holmes-url "${HOLMES_URL}" \

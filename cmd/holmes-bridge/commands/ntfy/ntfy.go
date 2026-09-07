@@ -1,4 +1,7 @@
-package commands
+// Package ntfy carries the settings for pushing finished investigations to a
+// phone, the commands for testing that path, and the Alertmanager pipeline
+// whose only output is such a push.
+package ntfy
 
 import (
 	"go.uber.org/zap"
@@ -7,8 +10,8 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/infra/ntfy"
 )
 
-// groupNtfy titles these flags in --help.
-const groupNtfy = "ntfy"
+// Group titles these flags in --help.
+const Group = "ntfy"
 
 // Ntfy pushes each finished investigation to a phone, so a responder sees what
 // HolmesGPT found without watching logs.
@@ -43,12 +46,12 @@ func (o *Ntfy) server() string {
 	return o.Server
 }
 
-// client builds the raw publisher.
+// Client builds the raw publisher.
 //
 // Notify swallows publish errors on purpose — a push must never fail an
 // investigation — so a command that exists to *diagnose* notifications needs
 // the client directly in order to report what went wrong.
-func (o *Ntfy) client() (*ntfy.Client, error) {
+func (o *Ntfy) Client() (*ntfy.Client, error) {
 	opts := []ntfy.Option{}
 
 	switch {
@@ -61,11 +64,11 @@ func (o *Ntfy) client() (*ntfy.Client, error) {
 	return ntfy.New(o.server(), o.Topic, opts...)
 }
 
-// notifier builds the publisher, or nil when no topic is configured.
+// Notifier builds the publisher, or nil when no topic is configured.
 //
 // The nil is returned as the interface type deliberately: a typed nil would
 // satisfy investigate.Notifier and then panic on the first push.
-func (o *Ntfy) notifier(logger *zap.Logger) (investigate.Notifier, error) {
+func (o *Ntfy) Notifier(logger *zap.Logger) (investigate.Notifier, error) {
 	if o.Topic == "" {
 		return nil, nil //nolint:nilnil // "no notifier, no error" is the honest result
 	}

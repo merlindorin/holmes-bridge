@@ -1,10 +1,10 @@
-package commands
+package expose
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/openotters/holt/pkg/expose"
+	holt "github.com/openotters/holt/pkg/expose"
 )
 
 func TestWebhookURLUnderSubdomainRouting(t *testing.T) {
@@ -12,10 +12,10 @@ func TestWebhookURLUnderSubdomainRouting(t *testing.T) {
 
 	// The address has to be complete: the whole point of --expose is producing
 	// something you paste into incident.io without editing it.
-	got, err := webhookURL(&expose.Peer{
+	got, err := webhookURL(&holt.Peer{
 		Name: "holmes-bridge",
 		URL:  "https://holmes-bridge.example.com/",
-	})
+	}, WebhookPath)
 	if err != nil {
 		t.Fatalf("webhookURL: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestWebhookURLJoinsWithoutDoubleSlash(t *testing.T) {
 		"https://holmes-bridge.example.com/",
 		"https://holmes-bridge.example.com",
 	} {
-		got, err := webhookURL(&expose.Peer{Name: "holmes-bridge", URL: base})
+		got, err := webhookURL(&holt.Peer{Name: "holmes-bridge", URL: base}, WebhookPath)
 		if err != nil {
 			t.Fatalf("%s: %v", base, err)
 		}
@@ -51,11 +51,11 @@ func TestWebhookURLRejectsHeaderRouting(t *testing.T) {
 	// incident.io sends a fixed set of headers and offers no way to add one, so
 	// a header-routed hub can never deliver to this peer. Failing at startup
 	// beats every delivery silently missing its target.
-	_, err := webhookURL(&expose.Peer{
+	_, err := webhookURL(&holt.Peer{
 		Name:        "holmes-bridge",
 		URL:         "https://holt.example.com",
 		RouteHeader: "x-tunnel-peer",
-	})
+	}, WebhookPath)
 	if err == nil {
 		t.Fatal("header routing should be rejected")
 	}
@@ -72,7 +72,7 @@ func TestWebhookURLRejectsUnknownAddress(t *testing.T) {
 
 	// A hub that could not be asked leaves the URL empty. Reporting that is
 	// more useful than publishing a tunnel nobody can address.
-	_, err := webhookURL(&expose.Peer{Name: "holmes-bridge"})
+	_, err := webhookURL(&holt.Peer{Name: "holmes-bridge"}, WebhookPath)
 	if err == nil {
 		t.Fatal("an empty URL should be rejected")
 	}

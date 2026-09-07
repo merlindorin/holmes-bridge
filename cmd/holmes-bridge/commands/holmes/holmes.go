@@ -1,15 +1,18 @@
-package commands
+// Package holmes carries the settings for the HolmesGPT server that performs
+// the investigations, and the startup check that says whether it can.
+package holmes
 
 import (
 	"context"
 
 	"go.uber.org/zap"
 
+	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/serving"
 	"github.com/merlindorin/holmes-bridge/internal/infra/holmes"
 )
 
-// groupHolmes titles these flags in --help.
-const groupHolmes = "holmes"
+// Group titles these flags in --help.
+const Group = "holmes"
 
 // Holmes is the HolmesGPT server that performs the investigations.
 type Holmes struct {
@@ -20,8 +23,8 @@ type Holmes struct {
 	Model string `name:"holmes-model" env:"HOLMES_MODEL" group:"holmes" help:"Model to investigate with. This is the KEY from the server's modelList, not the provider's model string. Empty uses the server default."`
 }
 
-// client builds the HolmesGPT client.
-func (o *Holmes) client() *holmes.Client {
+// Client builds the HolmesGPT client.
+func (o *Holmes) Client() *holmes.Client {
 	opts := []holmes.Option{holmes.WithModel(o.Model)}
 	if o.APIKey != "" {
 		opts = append(opts, holmes.WithAPIKey(o.APIKey))
@@ -30,10 +33,10 @@ func (o *Holmes) client() *holmes.Client {
 	return holmes.New(o.URL, opts...)
 }
 
-// check reports what HolmesGPT can actually do, and complains about the two
+// Check reports what HolmesGPT can actually do, and complains about the two
 // configurations that produce useless investigations rather than obvious errors.
-func (o *Holmes) check(ctx context.Context, logger *zap.Logger, client *holmes.Client) {
-	checkCtx, cancel := context.WithTimeout(ctx, preflightTimeout)
+func (o *Holmes) Check(ctx context.Context, logger *zap.Logger, client *holmes.Client) {
+	checkCtx, cancel := context.WithTimeout(ctx, serving.PreflightTimeout)
 	defer cancel()
 
 	if err := client.Health(checkCtx); err != nil {

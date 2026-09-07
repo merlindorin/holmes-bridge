@@ -141,7 +141,7 @@ linters:
         - all
         # QF1008 wants embedded field names dropped from selectors. The bridge's
         # options are split into embedded groups (IncidentIO, Holmes, Ntfy,
-        # Investigation) precisely so that o.Ntfy.notifier() says which group
+        # Investigation) precisely so that o.Ntfy.Notifier() says which group
         # owns the method. With four groups each carrying methods, the shortened
         # form is ambiguous rather than concise.
         - -QF1008
@@ -175,7 +175,7 @@ linters:
           # These files test unexported helpers (cursor pagination, fixture time
           # parsing), which only an in-package test can reach.
           - testpackage
-        path: (internal/infra/memory/page_test|internal/infra/fixtures/time_test|cmd/holmes-bridge/commands/expose_test|internal/app/investigate/notify_test|cmd/holmes-bridge/commands/ntfy_test)\.go
+        path: (internal/infra/memory/page_test|internal/infra/fixtures/time_test|cmd/holmes-bridge/commands/expose/expose_test|internal/app/investigate/notify_test|cmd/holmes-bridge/commands/ntfy/ntfy_test)\.go
     paths:
       - third_party$
       - builtin$

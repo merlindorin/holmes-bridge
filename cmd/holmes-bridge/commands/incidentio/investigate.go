@@ -1,9 +1,8 @@
-package commands
+package incidentio
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
@@ -30,6 +29,7 @@ func (i *Investigate) Run(
 	ctx context.Context, common *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer,
 ) error {
 	logger := common.MustLogger().Named("investigate")
+	printer := common.Printer()
 
 	if i.DryRun {
 		i.Investigation.WriteBack = "none"
@@ -69,9 +69,9 @@ func (i *Investigate) Run(
 		return nil
 	}
 
-	fmt.Fprintf(os.Stdout, "\n=== %s (%s) ===\n\n%s\n\n",
+	printer.Printf("\n=== %s (%s) ===\n\n%s\n\n",
 		result.Reference, result.IncidentID, result.Analysis)
-	fmt.Fprintf(os.Stdout, "--- %d tool calls in %s, written to %s ---\n",
+	printer.Printf("--- %d tool calls in %s, written to %s ---\n",
 		result.ToolCalls, result.Duration.Round(time.Millisecond), result.WrittenTo)
 
 	return nil

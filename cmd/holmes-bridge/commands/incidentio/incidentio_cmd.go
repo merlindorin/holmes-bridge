@@ -1,4 +1,4 @@
-package commands
+package incidentio
 
 import (
 	"context"
@@ -14,29 +14,34 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/globals"
 )
 
-// IncidentIOCmd groups the incident.io commands.
+// Cmd groups the incident.io commands: the pipeline itself, and the inspection
+// commands around it.
 //
-// These exist to answer the questions that otherwise need a hand-rolled curl
-// with the right bearer token: is this key valid, what can it see, and what
-// would the bridge actually read for a given incident.
-type IncidentIOCmd struct {
-	Identity  IncidentIOIdentity  `cmd:"" help:"Check the API key and show what it can do"`
-	Incidents IncidentIOIncidents `cmd:"" help:"List incidents"`
-	Show      IncidentIOShow      `cmd:"" help:"Show one incident, with the alerts and updates the bridge would read"`
+// The inspection commands exist to answer the questions that otherwise need a
+// hand-rolled curl with the right bearer token: is this key valid, what can it
+// see, and what would the bridge actually read for a given incident.
+type Cmd struct {
+	Serve       Serve       `cmd:"" default:"withargs" help:"Receive incident.io webhooks and investigate"`
+	Investigate Investigate `cmd:"" help:"Investigate one incident now and print the result"`
+
+	Identity  Identity  `cmd:"" help:"Check the API key and show what it can do"`
+	Incidents Incidents `cmd:"" help:"List incidents"`
+	Show      Show      `cmd:"" help:"Show one incident, with the alerts and updates the bridge would read"`
 }
 
-// IncidentIOIdentity verifies the API key.
-type IncidentIOIdentity struct {
+// Identity verifies the API key.
+type Identity struct {
 	IncidentIO `embed:""`
 }
 
 // Run reports who the key belongs to.
-func (c *IncidentIOIdentity) Run(
+func (c *Identity) Run(
 	ctx context.Context, common *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer,
 ) error {
 	logger := common.MustLogger().Named("incidentio")
+	printer := common.Printer()
 
-	client, err := c.IncidentIO.client(logger)
+	client, err := c.IncidentIO.Client(logger)
 	if err != nil {
 		return err
 	}
@@ -49,16 +54,16 @@ func (c *IncidentIOIdentity) Run(
 		return fmt.Errorf("could not verify the API key: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "url:        %s\n", c.URL)
-	fmt.Fprintf(os.Stdout, "identity:   %s\n", identity.Name)
-	fmt.Fprintf(os.Stdout, "dashboard:  %s\n", identity.DashboardUrl)
-	fmt.Fprintf(os.Stdout, "roles:      %s\n", joinRoles(identity.Roles))
+	printer.Printf("url:        %s\n", c.URL)
+	printer.Printf("identity:   %s\n", identity.Name)
+	printer.Printf("dashboard:  %s\n", identity.DashboardUrl)
+	printer.Printf("roles:      %s\n", joinRoles(identity.Roles))
 
 	// The bridge needs all three to do its job, and a key missing one fails
 	// only at the moment it matters.
 	for _, want := range []string{"incident_creator", "incident_editor", "viewer"} {
 		if !hasRole(identity.Roles, want) {
-			fmt.Fprintf(os.Stdout, "\nwarning: the key has no %q role. "+
+			printer.Printf("\nwarning: the key has no %q role. "+
 				"The bridge needs to view incidents, edit them, and create updates.\n", want)
 		}
 	}
@@ -66,20 +71,21 @@ func (c *IncidentIOIdentity) Run(
 	return nil
 }
 
-// IncidentIOIncidents lists incidents.
-type IncidentIOIncidents struct {
+// Incidents lists incidents.
+type Incidents struct {
 	IncidentIO `embed:""`
 
 	Limit int `help:"How many to list" default:"20"`
 }
 
 // Run prints a table of incidents.
-func (c *IncidentIOIncidents) Run(
+func (c *Incidents) Run(
 	ctx context.Context, common *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer,
 ) error {
 	logger := common.MustLogger().Named("incidentio")
+	printer := common.Printer()
 
-	client, err := c.IncidentIO.client(logger)
+	client, err := c.IncidentIO.Client(logger)
 	if err != nil {
 		return err
 	}
@@ -93,7 +99,7 @@ func (c *IncidentIOIncidents) Run(
 	}
 
 	if len(incidents) == 0 {
-		fmt.Fprintln(os.Stdout, "No incidents.")
+		printer.Println("No incidents.")
 		return nil
 	}
 
@@ -113,20 +119,21 @@ func (c *IncidentIOIncidents) Run(
 	return w.Flush()
 }
 
-// IncidentIOShow prints one incident as the bridge sees it.
-type IncidentIOShow struct {
+// Show prints one incident as the bridge sees it.
+type Show struct {
 	IncidentIO `embed:""`
 
 	ID string `arg:"" help:"incident.io incident ID"`
 }
 
 // Run prints the incident with the context an investigation would use.
-func (c *IncidentIOShow) Run(
+func (c *Show) Run(
 	ctx context.Context, common *cmd.Commons, _ *globals.HTTPServer, _ *globals.MetricServer,
 ) error {
 	logger := common.MustLogger().Named("incidentio")
+	printer := common.Printer()
 
-	client, err := c.IncidentIO.client(logger)
+	client, err := c.IncidentIO.Client(logger)
 	if err != nil {
 		return err
 	}
@@ -139,40 +146,40 @@ func (c *IncidentIOShow) Run(
 		return fmt.Errorf("could not load the incident: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "%s  %s\n", incident.Reference, incident.Name)
-	fmt.Fprintf(os.Stdout, "status:    %s\n", incident.IncidentStatus.Name)
+	printer.Printf("%s  %s\n", incident.Reference, incident.Name)
+	printer.Printf("status:    %s\n", incident.IncidentStatus.Name)
 
 	if incident.Severity != nil {
-		fmt.Fprintf(os.Stdout, "severity:  %s\n", incident.Severity.Name)
+		printer.Printf("severity:  %s\n", incident.Severity.Name)
 	}
 
-	fmt.Fprintf(os.Stdout, "mode:      %s\n", incident.Mode)
-	fmt.Fprintf(os.Stdout, "created:   %s\n", incident.CreatedAt.Format(time.RFC3339))
+	printer.Printf("mode:      %s\n", incident.Mode)
+	printer.Printf("created:   %s\n", incident.CreatedAt.Format(time.RFC3339))
 
 	if incident.Summary != nil && *incident.Summary != "" {
-		fmt.Fprintf(os.Stdout, "\nsummary:\n  %s\n", strings.Join(strings.Fields(*incident.Summary), " "))
+		printer.Printf("\nsummary:\n  %s\n", strings.Join(strings.Fields(*incident.Summary), " "))
 	}
 
 	// The two collections an investigation reads alongside the incident. Seeing
 	// them here is how you tell whether a thin analysis was the model's fault
 	// or a thin prompt.
 	if alerts, alertErr := client.IncidentAlerts(callCtx, c.ID); alertErr == nil && len(alerts) > 0 {
-		fmt.Fprintf(os.Stdout, "\nalerts (%d):\n", len(alerts))
+		printer.Printf("\nalerts (%d):\n", len(alerts))
 
 		for _, a := range alerts {
-			fmt.Fprintf(os.Stdout, "  [%s] %s\n", a.Alert.Status, a.Alert.Title)
+			printer.Printf("  [%s] %s\n", a.Alert.Status, a.Alert.Title)
 		}
 	}
 
 	if updates, updateErr := client.IncidentUpdates(callCtx, c.ID); updateErr == nil && len(updates) > 0 {
-		fmt.Fprintf(os.Stdout, "\nupdates (%d):\n", len(updates))
+		printer.Printf("\nupdates (%d):\n", len(updates))
 
 		for _, u := range updates {
 			if u.Message == nil || *u.Message == "" {
 				continue
 			}
 
-			fmt.Fprintf(os.Stdout, "  [%s] %s\n",
+			printer.Printf("  [%s] %s\n",
 				u.CreatedAt.Format("15:04"), truncateCell(strings.Join(strings.Fields(*u.Message), " "), 90))
 		}
 	}

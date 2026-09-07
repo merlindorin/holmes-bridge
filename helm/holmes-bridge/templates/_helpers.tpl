@@ -78,6 +78,7 @@ a choice rather than a toggle.
 */}}
 {{- define "holmes-bridge.args" -}}
 {{- if eq .Values.pipeline "incidentio" }}
+- incidentio
 - serve
 {{- range .Values.incidentio.triggers }}
 - --trigger={{ . }}

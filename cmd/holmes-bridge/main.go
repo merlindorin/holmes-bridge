@@ -13,6 +13,8 @@ import (
 	c "github.com/merlindorin/go-shared/pkg/cmd"
 
 	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands"
+	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/incidentio"
+	"github.com/merlindorin/holmes-bridge/cmd/holmes-bridge/commands/ntfy"
 	"github.com/merlindorin/holmes-bridge/internal/globals"
 )
 
@@ -40,10 +42,8 @@ func main() {
 		HTTPServer:   &globals.HTTPServer{},
 		MetricServer: &globals.MetricServer{},
 
-		Serve:       &commands.Serve{},
-		Investigate: &commands.Investigate{},
-		IncidentIO:  &commands.IncidentIOCmd{},
-		Ntfy:        &commands.NtfyCmd{},
+		IncidentIO: &incidentio.Cmd{},
+		Ntfy:       &ntfy.Cmd{},
 	}
 
 	ctx := kong.Parse(
@@ -76,11 +76,10 @@ type CMD struct {
 	*globals.HTTPServer   `embed:"" prefix:"http-"`
 	*globals.MetricServer `embed:"" prefix:"otel-"`
 
-	Serve       *commands.Serve       `cmd:"" default:"withargs" help:"Receive incident.io webhooks and investigate"`
-	Investigate *commands.Investigate `cmd:"" help:"Investigate one incident now and print the result"`
-
-	// One group per integration, for checking each on its own rather than
-	// inferring its health from a failed investigation.
-	IncidentIO *commands.IncidentIOCmd `cmd:"" name:"incidentio" help:"Inspect incident.io through the bridge's own client"`
-	Ntfy       *commands.NtfyCmd       `cmd:"" name:"ntfy" help:"Check and test notifications"`
+	// One group per pipeline. Each owns its own flow — incident.io in, analysis
+	// written back; or Alertmanager in, notification out — and carries the
+	// commands for checking that integration on its own, rather than inferring
+	// its health from a failed investigation.
+	IncidentIO *incidentio.Cmd `cmd:"" name:"incidentio" help:"Investigate incident.io incidents, and inspect the org they come from"`
+	Ntfy       *ntfy.Cmd       `cmd:"" name:"ntfy" help:"Investigate Alertmanager alerts, and check notifications"`
 }
