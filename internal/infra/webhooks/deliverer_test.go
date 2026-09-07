@@ -235,19 +235,25 @@ func TestDelivererRecordsAttempts(t *testing.T) {
 	run(t, d)
 
 	id, _ := d.Emit(domain.PublicIncidentIncidentCreatedV2, map[string]string{"id": "INC1"})
-	eventually(t, 1, got)
 
-	var found bool
+	// Wait on the log, not on the subscriber. The attempt is recorded after the
+	// POST returns, so a handler that has run does not yet imply an entry —
+	// waiting on the wrong signal makes this pass locally and fail on a slower
+	// machine.
+	_ = got
 
-	for _, a := range d.Log() {
-		if a.WebhookID == id && a.StatusCode == http.StatusOK {
-			found = true
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, a := range d.Log() {
+			if a.WebhookID == id && a.StatusCode == http.StatusOK {
+				return
+			}
 		}
+
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	if !found {
-		t.Errorf("delivery %s missing from the log: %+v", id, d.Log())
-	}
+	t.Errorf("delivery %s never reached the log: %+v", id, d.Log())
 }
 
 func TestDelivererPerSubscriptionSecret(t *testing.T) {
