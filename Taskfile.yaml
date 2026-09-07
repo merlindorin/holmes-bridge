@@ -5,16 +5,9 @@ includes:
     default: .tk/default/Taskfile.yaml
     git: .tk/git/Taskfile.yaml
     golangci: .tk/golangci/Taskfile.yaml
+    goreleaser: .tk/goreleaser/Taskfile.yaml
     install: .tk/install/Taskfile.yaml
-
-    # goreleaser and license are release-time only, and both resolve the
-    # project name through `gh repo view` in an eager `sh:` var. Task
-    # evaluates those at parse time, so including them before this repo has a
-    # GitHub origin breaks *every* task, not just theirs. Restore both once
-    # the repo is pushed:
-    #
-    #   goreleaser: .tk/goreleaser/Taskfile.yaml
-    #   license: .tk/license/Taskfile.yaml
+    license: .tk/license/Taskfile.yaml
 
 dotenv:
   - .env
