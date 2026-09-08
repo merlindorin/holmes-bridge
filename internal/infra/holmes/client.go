@@ -81,9 +81,21 @@ type Message struct {
 
 // ToolCall records one tool HolmesGPT invoked while answering.
 type ToolCall struct {
-	ToolName    string `json:"tool_name"`
-	Description string `json:"description"`
-	Result      any    `json:"result,omitempty"`
+	ToolName    string         `json:"tool_name"`
+	Description string         `json:"description"`
+	Result      ToolCallResult `json:"result,omitempty"`
+}
+
+// ToolCallResult is what a tool returned. Only the parts the bridge uses are
+// modelled; the payload itself is the model's business, not ours.
+//
+// URL is the browsable address of whatever the tool looked at — a dashboard, a
+// trace, a log query. HolmesGPT computes it but never shows it to the model:
+// the tool output the LLM sees is the stringified data alone. So an analysis
+// can name a dashboard it read and still be unable to link it, and the link
+// has to be recovered here.
+type ToolCallResult struct {
+	URL string `json:"url,omitempty"`
 }
 
 // ChatResponse is the body HolmesGPT returns from /api/chat.

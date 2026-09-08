@@ -337,7 +337,7 @@ func (s *Service) run(ctx context.Context, incidentID string) (*Result, error) {
 		Reference:  incident.Reference,
 		Name:       incident.Name,
 		Permalink:  valueOr(incident.Permalink, ""),
-		Analysis:   answer.Analysis,
+		Analysis:   withSources(answer.Analysis, answer.ToolCalls),
 		ToolCalls:  len(answer.ToolCalls),
 		Duration:   time.Since(started),
 	}
@@ -585,7 +585,7 @@ func (s *Service) Chat(ctx context.Context, ask string) (*Result, error) {
 	}
 
 	return &Result{
-		Analysis:  answer.Analysis,
+		Analysis:  withSources(answer.Analysis, answer.ToolCalls),
 		ToolCalls: len(answer.ToolCalls),
 		Duration:  s.now().Sub(started),
 		WrittenTo: string(WriteBackNone),

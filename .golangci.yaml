@@ -175,7 +175,7 @@ linters:
           # These files test unexported helpers (cursor pagination, fixture time
           # parsing), which only an in-package test can reach.
           - testpackage
-        path: (internal/infra/memory/page_test|internal/infra/fixtures/time_test|cmd/holmes-bridge/commands/expose/expose_test)\.go
+        path: (internal/infra/memory/page_test|internal/infra/fixtures/time_test|cmd/holmes-bridge/commands/expose/expose_test|internal/app/investigate/sources_test)\.go
     paths:
       - third_party$
       - builtin$
