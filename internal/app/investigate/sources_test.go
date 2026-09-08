@@ -86,3 +86,43 @@ func TestWithSourcesNumbersFromZeroAndDefinesReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestPlausibleCitationRejectsARewrite(t *testing.T) {
+	t.Parallel()
+
+	original := strings.Repeat("a bullet of evidence. ", 20)
+
+	for name, tc := range map[string]struct {
+		cited string
+		want  bool
+	}{
+		"markers added":   {"[0] " + original, true},
+		"empty":           {"", false},
+		"refused":         {"I cannot help with that.", false},
+		"summarised away": {"Everything is broken.", false},
+		"essay instead":   {strings.Repeat(original, 3), false},
+	} {
+		if got := plausibleCitation(original, tc.cited); got != tc.want {
+			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func TestDescribeSourceNamesTheTool(t *testing.T) {
+	t.Parallel()
+
+	calls := []holmes.ToolCall{{
+		ToolName:    "grafana_search_dashboards",
+		Description: "Search dashboards for otel",
+		Result:      holmes.ToolCallResult{URL: "https://a.example.com"},
+	}}
+
+	if got := describeSource("https://a.example.com", calls); got != "Search dashboards for otel" {
+		t.Errorf("got %q", got)
+	}
+
+	// A URL from no known call still needs a label rather than an empty one.
+	if got := describeSource("https://unknown.example.com", calls); got != "source" {
+		t.Errorf("unknown url should fall back, got %q", got)
+	}
+}

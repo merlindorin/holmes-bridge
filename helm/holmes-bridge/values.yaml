@@ -104,6 +104,9 @@ investigation:
   # update | timeline | none. Start with `none` against a real org: the bridge
   # investigates and logs, but writes nothing back.
   writeBack: update
+  # Prefix each supported claim with a [0]-style marker linking to the Sources
+  # list. Costs one extra model call per investigation, with no tool use.
+  citeSources: true
   # Go text/template for the system prompt that shapes every answer. Empty uses
   # the built-in default, which is what almost every deployment wants. The
   # template receives .Source — "incident" or "chat".

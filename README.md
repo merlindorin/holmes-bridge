@@ -115,7 +115,20 @@ HolmesGPT computes those but never shows them to the model, so the model cannot
 cite them and must not invent them; the bridge recovers them from the tool
 results instead, where they are known to be real. Each entry is also emitted as
 a Markdown link definition, so a bare `[0]` anywhere in the prose resolves to
-that URL.
+that URL, and each claim a source backs is prefixed with its marker:
+
+```
+- [0] p99 latency crossed 2s at 14:03
+
+**Sources**
+
+- [0] https://grafana.example.com/dashboards?query=checkout
+```
+
+The markers come from a second, tool-free model call: on the first pass the
+model has not been shown any URL, so it cannot know a source list exists, let
+alone how it is numbered. Turn that pass off with `CITE_SOURCES` ·
+`investigation.citeSources` if the extra call is not worth it.
 
 ### Asking a question directly
 

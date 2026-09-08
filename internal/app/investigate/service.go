@@ -63,6 +63,11 @@ func (w WriteBack) Valid() bool {
 
 // Config tunes the service.
 type Config struct {
+	// CiteSources adds [0]-style reference markers to the analysis, by asking
+	// the model a second time once the source list is known. It costs one extra
+	// model call per investigation, with no tool use.
+	CiteSources bool
+
 	// SystemPrompt is a Go text/template for the system prompt. Empty uses the
 	// built-in default, which is what almost every deployment should do.
 	SystemPrompt string
@@ -337,7 +342,7 @@ func (s *Service) run(ctx context.Context, incidentID string) (*Result, error) {
 		Reference:  incident.Reference,
 		Name:       incident.Name,
 		Permalink:  valueOr(incident.Permalink, ""),
-		Analysis:   withSources(answer.Analysis, answer.ToolCalls),
+		Analysis:   withSources(s.cite(ctx, log, answer.Analysis, answer.ToolCalls), answer.ToolCalls),
 		ToolCalls:  len(answer.ToolCalls),
 		Duration:   time.Since(started),
 	}
@@ -585,7 +590,7 @@ func (s *Service) Chat(ctx context.Context, ask string) (*Result, error) {
 	}
 
 	return &Result{
-		Analysis:  withSources(answer.Analysis, answer.ToolCalls),
+		Analysis:  withSources(s.cite(ctx, log, answer.Analysis, answer.ToolCalls), answer.ToolCalls),
 		ToolCalls: len(answer.ToolCalls),
 		Duration:  s.now().Sub(started),
 		WrittenTo: string(WriteBackNone),

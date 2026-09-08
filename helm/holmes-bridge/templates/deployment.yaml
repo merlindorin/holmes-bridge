@@ -70,6 +70,8 @@ spec:
               value: {{ .Values.investigation.attempts | quote }}
             - name: INVESTIGATION_TIMEOUT
               value: {{ .Values.investigation.timeout | quote }}
+            - name: CITE_SOURCES
+              value: {{ .Values.investigation.citeSources | quote }}
             {{- with .Values.investigation.systemPrompt }}
             - name: SYSTEM_PROMPT
               value: {{ . | quote }}
