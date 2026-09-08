@@ -56,58 +56,33 @@ minute or two per investigation and calls a paid model.
 
 ## Connecting incident.io
 
-Three things, all set up in the incident.io dashboard.
+In incident.io:
 
-**An API key**, from Settings → API keys, allowed to:
+- **API key** — Settings → API keys, allowed to view incidents, edit incidents
+  and create incident updates. The bridge checks all three at startup and names
+  any that are missing.
+- **Webhook** — Settings → Webhooks, pointed at `/webhooks/incidentio`.
+- **Subscriptions** — `public_incident.incident_created_v2` and
+  `public_incident.incident_status_updated_v2`. Edit and alert events are left
+  out on purpose: they fire constantly and rarely mean the picture changed.
+- **Signing secret** — shown once, when the webhook is created. Every delivery
+  is verified against it, and the bridge will not start without one.
 
-- view incidents
-- edit incidents
-- create incident updates
+In the bridge:
 
-The bridge verifies the key on startup and names any permission that is
-missing, so a key that is short one fails loudly rather than during your first
-real incident.
-
-**A webhook**, from Settings → Webhooks, pointed at the bridge's
-`/webhooks/incidentio` route and subscribed to:
-
-- `public_incident.incident_created_v2`
-- `public_incident.incident_status_updated_v2`
-
-That is "an incident opened" and "an incident changed status". Edit and alert
-events are deliberately left out: they fire constantly and rarely mean the
-picture has changed.
-
-**The signing secret** that incident.io shows when the webhook is created.
-Every delivery is checked against it, and the bridge will not start without
-one — an unverified webhook endpoint is an open invitation to spend your model
-budget.
-
-If the bridge sits somewhere incident.io cannot reach, it can dial out and
-publish only that one route through a reverse tunnel, printing the URL to
-register at startup.
-
-### Where the analysis goes
-
-Three choices:
-
-| Mode | What it does |
-|------|--------------|
-| **update** | Posts to the incident's update feed, which mirrors into its Slack channel. The useful default during a live incident. |
-| **timeline** | Pins the analysis to the incident timeline instead. Quieter, and better suited to retrospective work. |
-| **none** | Investigates and logs the result without touching the incident. |
-
-Start on **none** against a real org. Read a few analyses, decide whether you
-trust them, then let the bridge post.
+- **A model provider key**, for HolmesGPT.
+- **Write-back** — `update` posts to the incident's update feed and its Slack
+  channel, `timeline` pins the analysis to the timeline, `none` investigates and
+  logs nothing back. Start on `none` against a real org.
+- **A way in** — an ingress, or the built-in reverse tunnel when incident.io
+  cannot reach the bridge. The tunnel prints the URL to register at startup.
 
 ## Running it for real
 
 There's a Helm chart in `helm/holmes-bridge`. Point it at your Holmes, give it
 your incident.io credentials, and it deploys the bridge — with HolmesGPT
-alongside as a subchart, unless you already run one.
-
-The chart wants the three values above, plus a key for whichever model
-provider Holmes uses.
+alongside as a subchart, unless you already run one. Everything above is a
+chart value.
 
 ## The mock
 
