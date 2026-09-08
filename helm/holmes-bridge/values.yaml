@@ -122,6 +122,11 @@ incidentio:
   triggers:
     - public_incident.incident_created_v2
     - public_incident.incident_status_updated_v2
+  # Accept unsigned webhooks. Every delivery is then trusted, so anyone who can
+  # reach the endpoint can start investigations and spend the model budget.
+  # For poking the webhook path by hand over a port-forward — never with the
+  # route published. hack/send-webhook.sh signs a request properly instead.
+  skipSignatureVerification: false
 
 # ─── Publishing the webhook endpoint (holt) ──────────────────────────────────
 #

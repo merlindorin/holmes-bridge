@@ -73,6 +73,10 @@ spec:
 
             - name: INCIDENTIO_URL
               value: {{ .Values.incidentio.url | quote }}
+            {{- if .Values.incidentio.skipSignatureVerification }}
+            - name: SKIP_SIGNATURE_VERIFICATION
+              value: "true"
+            {{- end }}
           envFrom:
             # Carries INCIDENTIO_API_KEY, WEBHOOK_SECRET and HOLT_TOKEN —
             # whichever are set.

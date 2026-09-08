@@ -34,6 +34,12 @@
    ⚠  No webhook secret set. Deliveries cannot be verified and will be rejected.
 {{- end }}
 {{- end }}
+{{- if .Values.incidentio.skipSignatureVerification }}
+
+   ⚠  incidentio.skipSignatureVerification is on. Unsigned webhooks are
+      accepted, so anyone who can reach this endpoint can start investigations
+      and spend on a model. Turn it off before publishing the route.
+{{- end }}
 
 2. Write-back is "{{ .Values.investigation.writeBack }}".
 {{- if eq .Values.investigation.writeBack "update" }}
