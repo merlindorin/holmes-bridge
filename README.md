@@ -56,26 +56,42 @@ minute or two per investigation and calls a paid model.
 
 ## Connecting incident.io
 
+Each item lists its environment variable and its Helm value.
+
 In incident.io:
 
 - **API key** — Settings → API keys, allowed to view incidents, edit incidents
   and create incident updates. The bridge checks all three at startup and names
   any that are missing.
+  `INCIDENTIO_API_KEY` · `secrets.incidentioApiKey` — and `INCIDENTIO_URL` ·
+  `incidentio.url` to point somewhere other than api.incident.io
 - **Webhook** — Settings → Webhooks, pointed at `/webhooks/incidentio`.
 - **Subscriptions** — `public_incident.incident_created_v2` and
   `public_incident.incident_status_updated_v2`. Edit and alert events are left
   out on purpose: they fire constantly and rarely mean the picture changed.
+  `TRIGGERS` · `incidentio.triggers`
 - **Signing secret** — shown once, when the webhook is created. Every delivery
   is verified against it, and the bridge will not start without one.
+  `WEBHOOK_SECRET` · `secrets.webhookSecret`
 
 In the bridge:
 
-- **A model provider key**, for HolmesGPT.
+- **HolmesGPT** — where it runs, and which model key from its `modelList` to
+  investigate with.
+  `HOLMES_URL` · `holmesUrl` — `HOLMES_MODEL` · `holmesModel`
+- **A model provider key** — read by HolmesGPT, not the bridge.
+  `secrets.openrouterApiKey`
 - **Write-back** — `update` posts to the incident's update feed and its Slack
   channel, `timeline` pins the analysis to the timeline, `none` investigates and
   logs nothing back. Start on `none` against a real org.
+  `WRITE_BACK` · `investigation.writeBack`
 - **A way in** — an ingress, or the built-in reverse tunnel when incident.io
   cannot reach the bridge. The tunnel prints the URL to register at startup.
+  `ingress.enabled` — or `EXPOSE` · `expose.enabled` with `secrets.holtToken`
+
+Pacing has working defaults: `MAX_CONCURRENT`, `COOLDOWN`, `ATTEMPTS`,
+`INVESTIGATION_TIMEOUT`, `QUEUE_TIMEOUT` and `MIN_SEVERITY_RANK`, all under
+`investigation.*` in the chart.
 
 ## Running it for real
 
