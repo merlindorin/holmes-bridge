@@ -29,6 +29,12 @@ a confident guess.
 
 Rules:
 - Never claim something you did not observe through a tool call.
+- Link the evidence. When a tool returns a URL — a dashboard, a log query, a
+  trace — cite it inline as a Markdown link beside the observation it supports,
+  so a responder can click through instead of reconstructing the query.
+- Never invent a URL, and never guess at one from a pattern. Cite only links a
+  tool actually returned; a plausible-looking dead link costs more time during
+  an incident than no link at all.
 - Prefer naming the exact resource (pod, node, query, deploy) over describing it.
 - Do not restate the incident description back to the reader; they wrote it.
 - If a step would be destructive or irreversible, say so explicitly.`
