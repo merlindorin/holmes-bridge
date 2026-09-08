@@ -54,19 +54,60 @@ minute or two per investigation and calls a paid model.
 
 `task --list` shows the rest. Every command explains itself with `--help`.
 
+## Connecting incident.io
+
+Three things, all set up in the incident.io dashboard.
+
+**An API key**, from Settings → API keys, allowed to:
+
+- view incidents
+- edit incidents
+- create incident updates
+
+The bridge verifies the key on startup and names any permission that is
+missing, so a key that is short one fails loudly rather than during your first
+real incident.
+
+**A webhook**, from Settings → Webhooks, pointed at the bridge's
+`/webhooks/incidentio` route and subscribed to:
+
+- `public_incident.incident_created_v2`
+- `public_incident.incident_status_updated_v2`
+
+That is "an incident opened" and "an incident changed status". Edit and alert
+events are deliberately left out: they fire constantly and rarely mean the
+picture has changed.
+
+**The signing secret** that incident.io shows when the webhook is created.
+Every delivery is checked against it, and the bridge will not start without
+one — an unverified webhook endpoint is an open invitation to spend your model
+budget.
+
+If the bridge sits somewhere incident.io cannot reach, it can dial out and
+publish only that one route through a reverse tunnel, printing the URL to
+register at startup.
+
+### Where the analysis goes
+
+Three choices:
+
+| Mode | What it does |
+|------|--------------|
+| **update** | Posts to the incident's update feed, which mirrors into its Slack channel. The useful default during a live incident. |
+| **timeline** | Pins the analysis to the incident timeline instead. Quieter, and better suited to retrospective work. |
+| **none** | Investigates and logs the result without touching the incident. |
+
+Start on **none** against a real org. Read a few analyses, decide whether you
+trust them, then let the bridge post.
+
 ## Running it for real
 
 There's a Helm chart in `helm/holmes-bridge`. Point it at your Holmes, give it
 your incident.io credentials, and it deploys the bridge — with HolmesGPT
 alongside as a subchart, unless you already run one.
 
-Two things worth knowing before you point it at a real org:
-
-- **Start read-only.** The bridge can be told to investigate and print without
-  writing anything back. Do that first, read a few analyses, then let it post.
-- **Nothing needs to reach you.** If the bridge sits somewhere incident.io
-  cannot call — a laptop, a private cluster — it can dial out and publish just
-  its webhook endpoint through a reverse tunnel.
+The chart wants the three values above, plus a key for whichever model
+provider Holmes uses.
 
 ## The mock
 
