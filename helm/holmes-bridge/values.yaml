@@ -32,6 +32,17 @@ ingress:
           pathType: Prefix
   tls: []
 
+# An HTTPRoute instead, where the cluster runs Gateway API. Only the webhook
+# route is published either way.
+httpRoute:
+  enabled: false
+  annotations: {}
+  hostnames: []
+    # - holmes-bridge.example.com
+  parentRefs: []
+    # - name: my-gateway
+    #   namespace: my-gateway-namespace
+
 # ─── HolmesGPT ───────────────────────────────────────────────────────────────
 #
 # Deployed as a subchart. Everything under this key goes to the upstream
