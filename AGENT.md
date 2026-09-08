@@ -153,10 +153,10 @@ prompt — should be a prompt builder plus a call to `guarded`, not a second cop
 of that machinery. There was an Alertmanager pipeline built exactly that way;
 it was removed because the bridge is an incident.io integration.
 
-**The integration has its own subcommands.** `incidentio identity|incidents|show`
-exist so incident.io can be checked without running an investigation. They embed
-the same option groups the daemon uses, so what they exercise is the same code
-path.
+**There are commands for checking incident.io on its own.**
+`identity|incidents|show` exist so the integration can be verified without
+running an investigation. They embed the same option groups the daemon uses, so
+what they exercise is the same code path.
 
 **Only the webhook is inbound.** The bridge calls the incident.io API and
 HolmesGPT outward; nothing about those needs exposing. `--expose` exists solely

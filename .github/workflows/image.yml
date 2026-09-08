@@ -51,7 +51,7 @@ jobs:
           COPY linux/${TARGETARCH}/incidentio-mock /usr/bin/incidentio-mock
           COPY fixtures /fixtures
           ENTRYPOINT ["/usr/bin/holmes-bridge"]
-          CMD ["incidentio", "serve"]
+          CMD ["serve"]
           DOCKERFILE
 
       - uses: docker/setup-qemu-action@v3

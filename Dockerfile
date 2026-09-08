@@ -6,4 +6,4 @@ COPY fixtures /fixtures
 
 ENTRYPOINT [ "/usr/bin/holmes-bridge" ]
 
-CMD ["incidentio", "serve"]
+CMD ["serve"]

@@ -14,20 +14,12 @@ import (
 	"github.com/merlindorin/holmes-bridge/internal/globals"
 )
 
-// Cmd groups the incident.io commands: the pipeline itself, and the inspection
-// commands around it.
-//
-// The inspection commands exist to answer the questions that otherwise need a
+// Identity, Incidents and Show answer the questions that otherwise need a
 // hand-rolled curl with the right bearer token: is this key valid, what can it
 // see, and what would the bridge actually read for a given incident.
-type Cmd struct {
-	Serve       Serve       `cmd:"" default:"withargs" help:"Receive incident.io webhooks and investigate"`
-	Investigate Investigate `cmd:"" help:"Investigate one incident now and print the result"`
-
-	Identity  Identity  `cmd:"" help:"Check the API key and show what it can do"`
-	Incidents Incidents `cmd:"" help:"List incidents"`
-	Show      Show      `cmd:"" help:"Show one incident, with the alerts and updates the bridge would read"`
-}
+//
+// They embed the same option group the daemon uses, so what they exercise is
+// the same code path.
 
 // Identity verifies the API key.
 type Identity struct {

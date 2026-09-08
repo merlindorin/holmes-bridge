@@ -76,7 +76,6 @@ reach for and which silently never connects.
 The command the container runs.
 */}}
 {{- define "holmes-bridge.args" -}}
-- incidentio
 - serve
 {{- range .Values.incidentio.triggers }}
 - --trigger={{ . }}

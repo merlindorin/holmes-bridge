@@ -41,7 +41,11 @@ func main() {
 		HTTPServer:   &globals.HTTPServer{},
 		MetricServer: &globals.MetricServer{},
 
-		IncidentIO: &incidentio.Cmd{},
+		Serve:       &incidentio.Serve{},
+		Investigate: &incidentio.Investigate{},
+		Identity:    &incidentio.Identity{},
+		Incidents:   &incidentio.Incidents{},
+		Show:        &incidentio.Show{},
 	}
 
 	ctx := kong.Parse(
@@ -74,7 +78,12 @@ type CMD struct {
 	*globals.HTTPServer   `embed:"" prefix:"http-"`
 	*globals.MetricServer `embed:"" prefix:"otel-"`
 
-	// The pipeline, plus the commands for checking incident.io on its own
-	// rather than inferring its health from a failed investigation.
-	IncidentIO *incidentio.Cmd `cmd:"" name:"incidentio" help:"Investigate incident.io incidents, and inspect the org they come from"`
+	Serve       *incidentio.Serve       `cmd:"" default:"withargs" help:"Receive incident.io webhooks and investigate"`
+	Investigate *incidentio.Investigate `cmd:"" help:"Investigate one incident now and print the result"`
+
+	// Checking incident.io on its own, rather than inferring its health from a
+	// failed investigation.
+	Identity  *incidentio.Identity  `cmd:"" help:"Check the API key and show what it can do"`
+	Incidents *incidentio.Incidents `cmd:"" help:"List incidents"`
+	Show      *incidentio.Show      `cmd:"" help:"Show one incident, with the alerts and updates the bridge would read"`
 }
