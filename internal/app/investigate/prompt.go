@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/merlindorin/holmes-bridge/api/incidentio"
 )
 
-// systemPrompt shapes what HolmesGPT produces. It is deliberately prescriptive
+// defaultSystemPrompt shapes what HolmesGPT produces. It is deliberately prescriptive
 // about length and structure: the answer is posted into a live incident channel
 // where responders are busy, and an unbounded essay is worse than nothing.
-const systemPrompt = `You are assisting an on-call engineer during a live incident.
+const defaultSystemPrompt = `You are assisting an on-call engineer during a live incident.
 
 Investigate using the tools available to you, then answer in GitHub-flavoured
 Markdown with exactly these sections:
@@ -121,7 +122,7 @@ func BuildPrompt(
 		b.WriteString("\nDo not repeat what is already known above; build on it.\n")
 	}
 
-	return Prompt{Ask: b.String(), System: systemPrompt}
+	return Prompt{Ask: b.String(), System: SystemPrompt("")}
 }
 
 func responders(assignments []incidentio.IncidentRoleAssignmentV2) []string {
@@ -158,4 +159,43 @@ func since(t time.Time) string {
 // survives being put on a single bullet.
 func collapse(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// SystemPromptData is what a system prompt template can reference. It is
+// deliberately thin: the prompt shapes *how* to answer, and everything about
+// *what* is being asked already lives in the Ask.
+type SystemPromptData struct {
+	// Source names what triggered the investigation — "incident" or "chat" —
+	// so a template can vary its wording between an incident write-up and an
+	// answer to a typed question.
+	Source string
+}
+
+// SystemPrompt renders the system prompt from a Go text/template.
+//
+// An empty tmpl uses the built-in default. A template that will not parse or
+// execute falls back to the default rather than failing the investigation: a
+// bad override should degrade the wording, not take the bridge down mid-incident.
+func SystemPrompt(tmpl string, data ...SystemPromptData) string {
+	d := SystemPromptData{Source: "incident"}
+	if len(data) > 0 {
+		d = data[0]
+	}
+
+	text := tmpl
+	if strings.TrimSpace(text) == "" {
+		text = defaultSystemPrompt
+	}
+
+	t, err := template.New("system").Parse(text)
+	if err != nil {
+		return defaultSystemPrompt
+	}
+
+	var out strings.Builder
+	if execErr := t.Execute(&out, d); execErr != nil {
+		return defaultSystemPrompt
+	}
+
+	return out.String()
 }

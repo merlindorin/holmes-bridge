@@ -63,6 +63,10 @@ func (w WriteBack) Valid() bool {
 
 // Config tunes the service.
 type Config struct {
+	// SystemPrompt is a Go text/template for the system prompt. Empty uses the
+	// built-in default, which is what almost every deployment should do.
+	SystemPrompt string
+
 	// WriteBack selects where the analysis is recorded.
 	WriteBack WriteBack
 	// MaxConcurrent bounds simultaneous investigations. An investigation is
@@ -314,6 +318,7 @@ func (s *Service) run(ctx context.Context, incidentID string) (*Result, error) {
 	}
 
 	prompt := BuildPrompt(incident, alerts, updates)
+	prompt.System = SystemPrompt(s.cfg.SystemPrompt, SystemPromptData{Source: "incident"})
 
 	log.Info("starting investigation",
 		zap.Int("alerts", len(alerts)),
@@ -554,3 +559,35 @@ func outcome(result *Result, err error) string {
 
 // Ensure the concrete client satisfies the narrowed interface.
 var _ IncidentIO = (*infraincidentio.Client)(nil)
+
+// Chat answers a question typed by a person, through the same system prompt an
+// investigation uses.
+//
+// Deliberately not routed through guarded: the claim, the cooldown and the
+// per-subject dedup all exist to stop webhook-driven storms re-investigating
+// one incident. A human typing a question is none of those things, and a
+// cooldown would refuse the obvious follow-up.
+func (s *Service) Chat(ctx context.Context, ask string) (*Result, error) {
+	ask = strings.TrimSpace(ask)
+	if ask == "" {
+		return nil, errors.New("nothing to ask: the request carried an empty question")
+	}
+
+	log := s.logger.Named("chat")
+	started := s.now()
+
+	answer, err := s.askWith(ctx, log, "", Prompt{
+		Ask:    ask,
+		System: SystemPrompt(s.cfg.SystemPrompt, SystemPromptData{Source: "chat"}),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Result{
+		Analysis:  answer.Analysis,
+		ToolCalls: len(answer.ToolCalls),
+		Duration:  s.now().Sub(started),
+		WrittenTo: string(WriteBackNone),
+	}, nil
+}

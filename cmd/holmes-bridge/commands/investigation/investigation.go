@@ -27,6 +27,8 @@ type Investigation struct {
 
 	Attempts int `name:"attempts" env:"ATTEMPTS" group:"investigation" help:"Attempts per investigation before giving up" default:"2"`
 
+	SystemPrompt string `name:"system-prompt" env:"SYSTEM_PROMPT" group:"investigation" help:"Go text/template for the system prompt that shapes every answer. Empty uses the built-in default. Receives .Source, which is \"incident\" or \"chat\"."`
+
 	Timeout time.Duration `name:"investigation-timeout" env:"INVESTIGATION_TIMEOUT" group:"investigation" help:"Bound on a single investigation" default:"10m"`
 }
 
@@ -39,6 +41,7 @@ func (o *Investigation) Config() (investigate.Config, error) {
 	}
 
 	return investigate.Config{
+		SystemPrompt:    o.SystemPrompt,
 		WriteBack:       writeBack,
 		MaxConcurrent:   o.MaxConcurrent,
 		MinSeverityRank: o.MinSeverityRank,

@@ -104,6 +104,10 @@ investigation:
   # update | timeline | none. Start with `none` against a real org: the bridge
   # investigates and logs, but writes nothing back.
   writeBack: update
+  # Go text/template for the system prompt that shapes every answer. Empty uses
+  # the built-in default, which is what almost every deployment wants. The
+  # template receives .Source — "incident" or "chat".
+  systemPrompt: ""
   minSeverityRank: 0
   maxConcurrent: 2
   # Bounds the queue so a storm cannot build a backlog of stale analyses.

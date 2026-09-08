@@ -33,6 +33,7 @@ const maxBodyBytes = 1 << 20
 // Investigator runs an investigation for an incident.
 type Investigator interface {
 	Investigate(ctx context.Context, incidentID string) (*investigate.Result, error)
+	Chat(ctx context.Context, ask string) (*investigate.Result, error)
 }
 
 // Server receives incident.io webhooks and turns them into investigations.
@@ -70,6 +71,7 @@ func NewServer(
 func (s *Server) Mount(r gin.IRouter) {
 	r.POST("/webhooks/incidentio", s.receive)
 	r.POST("/investigations/:incident_id", s.trigger)
+	r.POST("/chat", s.chat)
 }
 
 // MountPublic attaches only what is safe to publish on the internet: the
@@ -260,4 +262,42 @@ var incidentEvents = []webhooks.EventType{
 	webhooks.PublicIncidentIncidentStatusUpdatedV2,
 	webhooks.PrivateIncidentIncidentCreatedV2,
 	webhooks.PrivateIncidentIncidentUpdatedV2,
+}
+
+// chatRequest is a question typed by a person.
+type chatRequest struct {
+	Ask string `json:"ask"`
+}
+
+// chat answers a free-form question through the bridge's system prompt.
+//
+// The point is the prompt: asking HolmesGPT directly gets its stock behaviour,
+// while going through here applies the same structure and rules an
+// investigation gets — which is what makes the two answers comparable.
+//
+// Local listener only, like the manual trigger: it takes no credential and
+// spends on a model.
+func (s *Server) chat(c *gin.Context) {
+	var req chatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		_ = c.Error(api.New(http.StatusBadRequest, api.TypeValidation, api.Single{
+			Code: "invalid_request", Message: `body must be {"ask": "..."}`,
+		}))
+
+		return
+	}
+
+	result, err := s.runner.Chat(c.Request.Context(), req.Ask)
+	if err != nil {
+		s.logger.Error("chat failed", zap.Error(err))
+		_ = c.Error(api.Internal("chat failed: " + err.Error()))
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"analysis":   result.Analysis,
+		"tool_calls": result.ToolCalls,
+		"duration":   result.Duration.String(),
+	})
 }

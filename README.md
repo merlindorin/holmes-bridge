@@ -93,6 +93,32 @@ Pacing has working defaults: `MAX_CONCURRENT`, `COOLDOWN`, `ATTEMPTS`,
 `INVESTIGATION_TIMEOUT`, `QUEUE_TIMEOUT` and `MIN_SEVERITY_RANK`, all under
 `investigation.*` in the chart.
 
+## Shaping the answer
+
+A system prompt decides what an analysis looks like — the sections, the length,
+the rule that every claim cites a tool call and every returned URL is linked.
+The built-in one is what you get by default.
+
+To change it, set a Go `text/template`:
+
+`SYSTEM_PROMPT` · `investigation.systemPrompt`
+
+The template receives `.Source`, which is `incident` when a webhook or a manual
+trigger started it, and `chat` when someone typed a question. A template that
+will not parse or execute falls back to the default rather than failing the
+investigation — a bad override should change the wording, not take the bridge
+down mid-incident.
+
+### Asking a question directly
+
+`POST /chat` with `{"ask": "..."}` answers a free-form question through that
+same prompt. The point is the prompt: asking HolmesGPT directly gets its stock
+behaviour, while going through the bridge applies the structure and rules an
+investigation gets, so the two answers are comparable.
+
+Like the manual trigger, it takes no credential and is never published through
+the tunnel — it spends on a model, so it stays on the local listener.
+
 ## Running it for real
 
 There's a Helm chart in `helm/holmes-bridge`. Point it at your Holmes, give it

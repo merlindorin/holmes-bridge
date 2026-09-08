@@ -70,6 +70,10 @@ spec:
               value: {{ .Values.investigation.attempts | quote }}
             - name: INVESTIGATION_TIMEOUT
               value: {{ .Values.investigation.timeout | quote }}
+            {{- with .Values.investigation.systemPrompt }}
+            - name: SYSTEM_PROMPT
+              value: {{ . | quote }}
+            {{- end }}
 
             - name: INCIDENTIO_URL
               value: {{ .Values.incidentio.url | quote }}
