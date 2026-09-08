@@ -109,11 +109,13 @@ will not parse or execute falls back to the default rather than failing the
 investigation — a bad override should change the wording, not take the bridge
 down mid-incident.
 
-Every analysis ends with a **Sources** list: the browsable URLs of whatever the
-investigation actually opened — a Grafana dashboard, a trace, a log query.
+Every analysis ends with a numbered **Sources** list: the browsable URLs of
+whatever the investigation actually opened — a Grafana dashboard, a trace, a log query.
 HolmesGPT computes those but never shows them to the model, so the model cannot
 cite them and must not invent them; the bridge recovers them from the tool
-results instead, where they are known to be real.
+results instead, where they are known to be real. Each entry is also emitted as
+a Markdown link definition, so a bare `[0]` anywhere in the prose resolves to
+that URL.
 
 ### Asking a question directly
 

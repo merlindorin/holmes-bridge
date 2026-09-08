@@ -1,6 +1,7 @@
 package investigate
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -31,12 +32,21 @@ func withSources(analysis string, calls []holmes.ToolCall) string {
 	b.WriteString(strings.TrimRight(analysis, "\n"))
 	b.WriteString("\n\n")
 	b.WriteString(sourcesHeading)
+	b.WriteString("\n\n")
+
+	// The visible list. Bare URLs autolink in GitHub-flavoured Markdown, which
+	// is what incident.io renders, so the entry is clickable as it stands.
+	for i, l := range links {
+		fmt.Fprintf(&b, "- [%d] %s\n", i, l)
+	}
+
+	// Link definitions, so a bare [0] anywhere in the prose resolves to the
+	// same URL. Renderers hide these lines; they only exist to make the
+	// reference syntax work.
 	b.WriteString("\n")
 
-	for _, l := range links {
-		b.WriteString("- ")
-		b.WriteString(l)
-		b.WriteString("\n")
+	for i, l := range links {
+		fmt.Fprintf(&b, "[%d]: %s\n", i, l)
 	}
 
 	return strings.TrimRight(b.String(), "\n")

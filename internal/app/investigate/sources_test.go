@@ -63,3 +63,26 @@ func TestSourcesDedupesAndOrders(t *testing.T) {
 		t.Errorf("want two links in a stable order, got %v", got)
 	}
 }
+
+func TestWithSourcesNumbersFromZeroAndDefinesReferences(t *testing.T) {
+	t.Parallel()
+
+	got := withSources("**Summary**\nBroken.", []holmes.ToolCall{
+		call("https://a.example.com"),
+		call("https://b.example.com"),
+	})
+
+	// The visible list a reader scans.
+	for _, want := range []string{"- [0] https://a.example.com", "- [1] https://b.example.com"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+
+	// The definitions, which renderers hide, so a bare [0] in the prose links.
+	for _, want := range []string{"[0]: https://a.example.com", "[1]: https://b.example.com"} {
+		if !strings.Contains(got, "\n"+want) {
+			t.Errorf("missing link definition %q in:\n%s", want, got)
+		}
+	}
+}
