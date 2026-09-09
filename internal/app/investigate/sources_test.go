@@ -142,3 +142,23 @@ func TestLinkLabelNamesWhatTheResponderWillSee(t *testing.T) {
 		}
 	}
 }
+
+func TestPlausibleCitationIgnoresURLLength(t *testing.T) {
+	t.Parallel()
+
+	// A Grafana Explore link carries its whole query and time range. Four of
+	// them inline can outweigh the analysis itself, which must not look like a
+	// rewrite — this is the case the guard exists to allow, not reject.
+	original := strings.Repeat("a bullet of evidence. ", 20)
+	huge := "https://grafana.example.com/explore?panes=" + strings.Repeat("x", 900)
+	cited := original + " ([check logs](" + huge + "))"
+
+	if !plausibleCitation(original, cited) {
+		t.Error("adding a very long URL should not look like a rewrite")
+	}
+
+	// Prose actually replaced is still caught, however long the URLs are.
+	if plausibleCitation(original, "Everything is fine. ([check logs]("+huge+"))") {
+		t.Error("a summarised-away analysis should still be rejected")
+	}
+}

@@ -236,16 +236,27 @@ func describeSource(url string, calls []holmes.ToolCall) string {
 // The pass is asked to add links and change nothing else; a model that instead
 // summarises, refuses, or answers a different question would otherwise silently
 // replace a good analysis with a worse one.
+//
+// The comparison ignores URLs. A Grafana Explore link carries its whole query
+// and time range — the better part of a kilobyte each — so counting them
+// measured the links rather than the prose, and rejected exactly the specific,
+// useful citations this is for.
 func plausibleCitation(original, cited string) bool {
-	if cited == "" {
+	if strings.TrimSpace(cited) == "" {
 		return false
 	}
 
-	// Length is blunt but effective: a link adds tens of characters per claim,
-	// so anything far shorter or much longer is a different answer.
-	ratio := float64(len(cited)) / float64(len(original))
+	prose := func(s string) int { return len(urlPattern.ReplaceAllString(s, "")) }
 
-	return ratio >= 0.6 && ratio <= 2.5
+	before := prose(original)
+	if before == 0 {
+		return true
+	}
+
+	// A label and a pair of brackets per claim, not a rewrite.
+	ratio := float64(prose(cited)) / float64(before)
+
+	return ratio >= 0.7 && ratio <= 1.6
 }
 
 // finalAnalysis is the text a responder reads: links woven in beside the claims
