@@ -126,7 +126,9 @@ func TestUnknownURLsCatchesAnInventedLink(t *testing.T) {
 	// A URL the analysis itself quoted — the request path from a log line — is
 	// the model reporting evidence, not citing a page.
 	quoted := "- 403 on `https://www.example.com/ws/listings/`"
-	if got := unknownURLs(quoted, quoted+" ([check logs](https://grafana.example.com/explore?a=1))", allowed); len(got) != 0 {
+	cited := quoted + " ([check logs](https://grafana.example.com/explore?a=1))"
+
+	if got := unknownURLs(quoted, cited, allowed); len(got) != 0 {
 		t.Errorf("a URL already in the analysis should not be flagged, got %v", got)
 	}
 }
