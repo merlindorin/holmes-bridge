@@ -64,29 +64,6 @@ func TestSourcesDedupesAndOrders(t *testing.T) {
 	}
 }
 
-func TestWithSourcesNumbersFromZeroAndDefinesReferences(t *testing.T) {
-	t.Parallel()
-
-	got := withSources("**Summary**\nBroken.", []holmes.ToolCall{
-		call("https://a.example.com"),
-		call("https://b.example.com"),
-	})
-
-	// The visible list a reader scans.
-	for _, want := range []string{"- [0] https://a.example.com", "- [1] https://b.example.com"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q in:\n%s", want, got)
-		}
-	}
-
-	// The definitions, which renderers hide, so a bare [0] in the prose links.
-	for _, want := range []string{"[0]: https://a.example.com", "[1]: https://b.example.com"} {
-		if !strings.Contains(got, "\n"+want) {
-			t.Errorf("missing link definition %q in:\n%s", want, got)
-		}
-	}
-}
-
 func TestPlausibleCitationRejectsARewrite(t *testing.T) {
 	t.Parallel()
 
@@ -122,7 +99,46 @@ func TestDescribeSourceNamesTheTool(t *testing.T) {
 	}
 
 	// A URL from no known call still needs a label rather than an empty one.
-	if got := describeSource("https://unknown.example.com", calls); got != "source" {
+	if got := describeSource("https://unknown.example.com", calls); got != "a tool" {
 		t.Errorf("unknown url should fall back, got %q", got)
+	}
+}
+
+func TestUnknownURLsCatchesAnInventedLink(t *testing.T) {
+	t.Parallel()
+
+	allowed := []string{"https://grafana.example.com/explore?a=1"}
+
+	// The real one, cited correctly, is not flagged.
+	text := "- latency rose ([check logs](https://grafana.example.com/explore?a=1))"
+	if got := unknownURLs(text, allowed); len(got) != 0 {
+		t.Errorf("a returned URL should be accepted, got %v", got)
+	}
+
+	// A URL the tools never opened looks authoritative and goes nowhere.
+	text = "- latency rose ([check logs](https://grafana.example.com/d/made-up))"
+	if got := unknownURLs(text, allowed); len(got) != 1 {
+		t.Errorf("an invented URL should be caught, got %v", got)
+	}
+}
+
+func TestLinkLabelNamesWhatTheResponderWillSee(t *testing.T) {
+	t.Parallel()
+
+	for tool, want := range map[string]string{
+		"fetch_loki_logs":           "check logs",
+		"tempo_search_traces_by_id": "view traces",
+		"grafana_search_dashboards": "browse dashboards",
+		"grafana_get_dashboard":     "open dashboard",
+		"something_else":            "open in Grafana",
+	} {
+		calls := []holmes.ToolCall{{
+			ToolName: tool,
+			Result:   holmes.ToolCallResult{URL: "https://a.example.com"},
+		}}
+
+		if got := linkLabel("https://a.example.com", calls); got != want {
+			t.Errorf("%s: got %q, want %q", tool, got, want)
+		}
 	}
 }

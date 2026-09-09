@@ -3,6 +3,7 @@ package investigate
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -80,49 +81,51 @@ func sources(calls []holmes.ToolCall) []string {
 	return out
 }
 
-// citePrompt asks for the markers to be inserted, and nothing else.
+// citePrompt asks for the links to be woven in, and nothing else.
 //
-// The model cannot cite sources on the first pass: HolmesGPT never shows it a
-// tool's URL, so at the moment it writes the analysis it does not know a source
-// list exists, let alone how it is numbered. This second pass hands it both.
+// The model cannot do this on the first pass: HolmesGPT never shows it a tool's
+// URL, so while it writes the analysis it does not know these pages exist.
 //
 // Deliberately not given the tool output again — only the analysis and the
-// list. Deciding which source backs which bullet needs the prose and the tool
-// names, not the payloads, and resending those would cost more than the
-// investigation did.
-const citePrompt = `Below is an analysis you wrote, and the numbered sources it drew on.
+// links. Deciding which page backs which claim needs the prose and the labels,
+// not the payloads, and resending those would cost more than the investigation.
+const citePrompt = `Below is an analysis you wrote, and the pages the tools opened while producing it.
 
-Return the analysis again, unchanged except that each bullet or claim supported
-by a source is prefixed with its reference marker: [0], [1], and so on.
+Return the analysis again, unchanged except that each claim a page supports
+gains an inline Markdown link to it, using the given label.
 
 Rules:
 - Change nothing else. Same sections, same wording, same order.
-- A marker goes at the START of the bullet it supports, before the text.
-- Only cite a source that genuinely backs that specific claim. A bullet no
-  source supports keeps no marker; guessing is worse than leaving it bare.
-- Cite only the numbers listed below. Never invent one.
+- Put the link at the END of the claim it supports, in parentheses:
+  ` + "`- p99 latency crossed 2s at 14:03 ([check logs](https://...))`" + `
+- A claim may carry more than one link, comma separated.
+- Only link a page that genuinely backs that specific claim. A claim no page
+  supports gets no link; guessing is worse than leaving it bare.
+- Use ONLY the URLs listed below, character for character. Never edit one,
+  never build a new one, never guess a path. A dead link during an incident
+  costs more time than no link.
+- Do not add a trailing list of links. They belong beside the claims.
 - Return only the analysis. No preamble, no explanation of what you changed.`
 
-// cite runs the marker-insertion pass, falling back to the original analysis.
+// cite weaves the pages the tools opened into the analysis as inline links.
 //
-// Every failure here is non-fatal by design. The analysis is already correct
-// and already carries its sources; markers are a readability nicety, and losing
-// them is not worth failing an investigation somebody is waiting on.
+// Returns ok=false when the analysis should be left as written, in which case
+// the caller appends a plain source list instead.
 func (s *Service) cite(
 	ctx context.Context, log *zap.Logger, analysis string, calls []holmes.ToolCall,
-) string {
+) (string, bool) {
 	links := sources(calls)
 	if len(links) == 0 || !s.cfg.CiteSources {
-		return analysis
+		return analysis, false
 	}
 
 	var b strings.Builder
 
 	b.WriteString(citePrompt)
-	b.WriteString("\n\n## Sources\n")
+	b.WriteString("\n\n## Pages\n")
 
-	for i, l := range links {
-		fmt.Fprintf(&b, "[%d] %s — %s\n", i, describeSource(l, calls), l)
+	for _, l := range links {
+		fmt.Fprintf(&b, "- label %q, opened by %s: %s\n", linkLabel(l, calls), describeSource(l, calls), l)
 	}
 
 	b.WriteString("\n## Analysis\n")
@@ -130,23 +133,87 @@ func (s *Service) cite(
 
 	answer, err := s.askWith(ctx, log, "", Prompt{Ask: b.String()})
 	if err != nil {
-		log.Warn("could not add source markers; keeping the analysis as written",
-			zap.Error(err))
-
-		return analysis
+		log.Warn("could not add source links; keeping the analysis as written", zap.Error(err))
+		return analysis, false
 	}
 
 	cited := strings.TrimSpace(answer.Analysis)
 	if !plausibleCitation(analysis, cited) {
 		log.Warn("the citation pass returned something other than the analysis; discarding it")
-
-		return analysis
+		return analysis, false
 	}
 
-	return cited
+	// A link the tools never opened is worse than none: it looks authoritative
+	// and goes nowhere. One invented URL discards the whole rewrite, because
+	// there is no way to tell which of the others were also embellished.
+	if invented := unknownURLs(cited, links); len(invented) > 0 {
+		log.Warn("the citation pass invented URLs; discarding it",
+			zap.Strings("invented", invented))
+
+		return analysis, false
+	}
+
+	return cited, true
 }
 
-// describeSource names the tool a URL came from, so the model can tell two
+// linkLabel is the words a responder clicks. It comes from the tool that opened
+// the page, because the tool is what decides whether this is a log query, a
+// trace, or a dashboard.
+func linkLabel(url string, calls []holmes.ToolCall) string {
+	name := ""
+
+	for _, c := range calls {
+		if strings.TrimSpace(c.Result.URL) == url {
+			name = strings.ToLower(c.ToolName)
+			break
+		}
+	}
+
+	switch {
+	case strings.Contains(name, "loki"), strings.Contains(name, "log"):
+		return "check logs"
+	case strings.Contains(name, "tempo"), strings.Contains(name, "trace"):
+		return "view traces"
+	case strings.Contains(name, "search_dashboards"):
+		return "browse dashboards"
+	case strings.Contains(name, "dashboard"):
+		return "open dashboard"
+	case strings.Contains(name, "metric"), strings.Contains(name, "prometheus"):
+		return "see metrics"
+	default:
+		return "open in Grafana"
+	}
+}
+
+// urlPattern finds the http(s) URLs in a block of Markdown.
+var urlPattern = regexp.MustCompile(`https?://[^\s)\]]+`)
+
+// unknownURLs are the URLs in text that no tool actually returned.
+func unknownURLs(text string, allowed []string) []string {
+	known := make(map[string]bool, len(allowed))
+	for _, a := range allowed {
+		known[a] = true
+	}
+
+	var out []string
+
+	seen := map[string]bool{}
+
+	for _, u := range urlPattern.FindAllString(text, -1) {
+		u = strings.TrimRight(u, ".,;")
+		if known[u] || seen[u] {
+			continue
+		}
+
+		seen[u] = true
+
+		out = append(out, u)
+	}
+
+	return out
+}
+
+// describeSource names the tool a page came from, so the model can tell two
 // dashboards apart without opening them.
 func describeSource(url string, calls []holmes.ToolCall) string {
 	for _, c := range calls {
@@ -161,22 +228,35 @@ func describeSource(url string, calls []holmes.ToolCall) string {
 		return c.ToolName
 	}
 
-	return "source"
+	return "a tool"
 }
 
 // plausibleCitation rejects a rewrite that is not recognisably the original.
 //
-// The pass is asked to add markers and change nothing else; a model that
-// instead summarises, refuses, or answers a different question would otherwise
-// silently replace a good analysis with a worse one.
+// The pass is asked to add links and change nothing else; a model that instead
+// summarises, refuses, or answers a different question would otherwise silently
+// replace a good analysis with a worse one.
 func plausibleCitation(original, cited string) bool {
 	if cited == "" {
 		return false
 	}
 
-	// Length is a blunt but effective check: markers add a few characters per
-	// bullet, so anything far shorter or longer is a different answer.
+	// Length is blunt but effective: a link adds tens of characters per claim,
+	// so anything far shorter or much longer is a different answer.
 	ratio := float64(len(cited)) / float64(len(original))
 
-	return ratio >= 0.6 && ratio <= 1.6
+	return ratio >= 0.6 && ratio <= 2.5
+}
+
+// finalAnalysis is the text a responder reads: links woven in beside the claims
+// they support where the citation pass worked, and a plain list of the pages
+// appended where it did not.
+func (s *Service) finalAnalysis(
+	ctx context.Context, log *zap.Logger, answer *holmes.ChatResponse,
+) string {
+	if cited, ok := s.cite(ctx, log, answer.Analysis, answer.ToolCalls); ok {
+		return cited
+	}
+
+	return withSources(answer.Analysis, answer.ToolCalls)
 }

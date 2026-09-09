@@ -109,26 +109,23 @@ will not parse or execute falls back to the default rather than failing the
 investigation — a bad override should change the wording, not take the bridge
 down mid-incident.
 
-Every analysis ends with a numbered **Sources** list: the browsable URLs of
-whatever the investigation actually opened — a Grafana dashboard, a trace, a log query.
-HolmesGPT computes those but never shows them to the model, so the model cannot
-cite them and must not invent them; the bridge recovers them from the tool
-results instead, where they are known to be real. Each entry is also emitted as
-a Markdown link definition, so a bare `[0]` anywhere in the prose resolves to
-that URL, and each claim a source backs is prefixed with its marker:
+Each claim carries a link to the page that backs it, labelled by what you get
+if you click:
 
 ```
-- [0] p99 latency crossed 2s at 14:03
-
-**Sources**
-
-- [0] https://grafana.example.com/dashboards?query=checkout
+- p99 latency crossed 2s at 14:03 ([check logs](https://…/explore?panes=…))
 ```
 
-The markers come from a second, tool-free model call: on the first pass the
-model has not been shown any URL, so it cannot know a source list exists, let
-alone how it is numbered. Turn that pass off with `CITE_SOURCES` ·
-`investigation.citeSources` if the extra call is not worth it.
+How specific those links are follows from which tools ran. A log query becomes
+a Grafana Explore link with the LogQL and time range already in it; a dashboard
+search can only ever link the search. HolmesGPT computes these URLs but never
+shows them to the model, so on the first pass it does not know the pages exist.
+A second, tool-free pass hands it the list and asks it to weave them in — and
+the result is rejected if it contains a URL no tool returned, because a link
+that looks authoritative and goes nowhere costs more time than none.
+
+Turn that pass off with `CITE_SOURCES` · `investigation.citeSources`; the pages
+are then appended as a plain list instead.
 
 ### Asking a question directly
 
