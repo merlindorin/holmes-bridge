@@ -109,16 +109,25 @@ func TestUnknownURLsCatchesAnInventedLink(t *testing.T) {
 
 	allowed := []string{"https://grafana.example.com/explore?a=1"}
 
+	original := "- latency rose"
+
 	// The real one, cited correctly, is not flagged.
 	text := "- latency rose ([check logs](https://grafana.example.com/explore?a=1))"
-	if got := unknownURLs(text, allowed); len(got) != 0 {
+	if got := unknownURLs(original, text, allowed); len(got) != 0 {
 		t.Errorf("a returned URL should be accepted, got %v", got)
 	}
 
 	// A URL the tools never opened looks authoritative and goes nowhere.
 	text = "- latency rose ([check logs](https://grafana.example.com/d/made-up))"
-	if got := unknownURLs(text, allowed); len(got) != 1 {
+	if got := unknownURLs(original, text, allowed); len(got) != 1 {
 		t.Errorf("an invented URL should be caught, got %v", got)
+	}
+
+	// A URL the analysis itself quoted — the request path from a log line — is
+	// the model reporting evidence, not citing a page.
+	quoted := "- 403 on `https://www.example.com/ws/listings/`"
+	if got := unknownURLs(quoted, quoted+" ([check logs](https://grafana.example.com/explore?a=1))", allowed); len(got) != 0 {
+		t.Errorf("a URL already in the analysis should not be flagged, got %v", got)
 	}
 }
 

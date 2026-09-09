@@ -146,7 +146,7 @@ func (s *Service) cite(
 	// A link the tools never opened is worse than none: it looks authoritative
 	// and goes nowhere. One invented URL discards the whole rewrite, because
 	// there is no way to tell which of the others were also embellished.
-	if invented := unknownURLs(cited, links); len(invented) > 0 {
+	if invented := unknownURLs(analysis, cited, links); len(invented) > 0 {
 		log.Warn("the citation pass invented URLs; discarding it",
 			zap.Strings("invented", invented))
 
@@ -188,27 +188,39 @@ func linkLabel(url string, calls []holmes.ToolCall) string {
 // urlPattern finds the http(s) URLs in a block of Markdown.
 var urlPattern = regexp.MustCompile(`https?://[^\s)\]]+`)
 
-// unknownURLs are the URLs in text that no tool actually returned.
-func unknownURLs(text string, allowed []string) []string {
-	known := make(map[string]bool, len(allowed))
+// urlsIn are the distinct URLs in a block of text, stripped of the punctuation
+// and Markdown that tends to sit against them.
+func urlsIn(text string) map[string]bool {
+	out := map[string]bool{}
+
+	for _, u := range urlPattern.FindAllString(text, -1) {
+		out[strings.Trim(u, "`'\".,;")] = true
+	}
+
+	return out
+}
+
+// unknownURLs are the URLs the citation pass introduced that no tool returned.
+//
+// Only what the pass *added* counts. An analysis routinely quotes URLs of its
+// own — the request path in a log line, an endpoint named in an error — and
+// those are the model reporting evidence, not citing a page. Flagging them
+// discarded good rewrites over URLs the pass never touched.
+func unknownURLs(original, cited string, allowed []string) []string {
+	known := urlsIn(original)
 	for _, a := range allowed {
 		known[a] = true
 	}
 
 	var out []string
 
-	seen := map[string]bool{}
-
-	for _, u := range urlPattern.FindAllString(text, -1) {
-		u = strings.TrimRight(u, ".,;")
-		if known[u] || seen[u] {
-			continue
+	for u := range urlsIn(cited) {
+		if !known[u] {
+			out = append(out, u)
 		}
-
-		seen[u] = true
-
-		out = append(out, u)
 	}
+
+	sort.Strings(out)
 
 	return out
 }
